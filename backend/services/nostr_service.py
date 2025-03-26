@@ -1,5 +1,8 @@
+import hashlib
 import os
-from typing import Dict, Any, List
+import secrets
+import time
+from typing import Dict, List
 from dotenv import load_dotenv
 from nostr_sdk import Keys, Client, EventBuilder, NostrSigner, Tag
 
@@ -8,8 +11,8 @@ load_dotenv()
 
 class NostrService:
     """
-    Nostr service for publishing listings to the Nostr network
-    using the nostr-sdk library
+    A generic Nostr service for publishing various types of events
+    to the Nostr network using the nostr-sdk library
     """
 
     def __init__(self, private_key_hex: str = None, relays: List[str] = None):
@@ -25,6 +28,15 @@ class NostrService:
         self.client = None
         self.signer = None
         self.is_connected = False
+
+    def _generate_unique_id(self):
+        """Generate a unique ID for events."""
+        timestamp = str(time.time())
+        random_bytes = secrets.token_bytes(16)
+        combined = timestamp.encode() + random_bytes
+        unique_id = hashlib.sha256(combined).hexdigest()[:32]
+
+        return unique_id
 
     async def connect(self):
         """Connect to Nostr relays"""
@@ -57,153 +69,126 @@ class NostrService:
         if not self.is_connected:
             await self.connect()
 
-    async def publish_listing(self, listing_data: Dict[Any, Any]) -> str:
+    async def publish_event(self,
+                            content: str,
+                            tags: List[Tag] = None) -> Dict[str, str]:
         """
-        Publish a listing to Nostr relays.
+        Publish a generic event to Nostr relays with an automatically generated unique identifier.
 
         Args:
-            listing_data: Dictionary containing listing information
+            content: Content of the event
+            tags: List of Tag objects to include (optional)
+            kind: Kind of the event (default: 1 for text_note)
 
         Returns:
-            Event ID of the published listing
+            Dictionary with event_id and identifier
         """
         await self.ensure_connected()
 
         if not self.client or not self.signer:
             print("Nostr client not initialized properly")
-            return f"nostr-error-{listing_data.get('id', 'unknown')}"
+            return {
+                "event_id": "nostr-error-not-initialized",
+                "identifier": ""
+            }
 
         try:
-            # Create content - basic description of the listing
-            title = listing_data.get("title", "Untitled Listing")
-            price = listing_data.get("price", 0)
-            condition = listing_data.get("condition", "unknown")
+            # Generate a unique identifier
+            unique_id = self._generate_unique_id()
 
-            content = f"📦 {title}\nPrice: ${price}\nCondition: {condition}\n\n{listing_data.get('description', '')}"
+            # Create a list of tags if none provided
+            if tags is None:
+                tags = []
 
-            # Create tags for better discoverability
-            tags = []
-
-            # Standard tags for marketplace listings
-            tags.append(Tag.parse(["marketplace", "listing"]))
-            tags.append(Tag.parse(["title", title]))
-            tags.append(Tag.parse(["price", str(price)]))
-            tags.append(Tag.parse(["condition", str(condition)]))
-
-            product_tag = Tag.hashtag("")
-
-
-            # Add category if available
-            if "category_id" in listing_data:
-                tags.append(Tag.parse(["category", str(listing_data["category_id"])]))
-
-            # Add listing tags
-            for tag in listing_data.get("tags", []):
-                tags.append(Tag.parse(["t", tag]))
-
-            # Add images if available
-            for image in listing_data.get("images", []):
-                if isinstance(image, dict) and "url" in image:
-                    tags.append(Tag.parse(["image", str(image["url"])]))
-                elif isinstance(image, str):
-                    tags.append(Tag.parse(["image", image]))
-
-            # Create the event builder
-            builder = EventBuilder.text_note(content)
-
-
-            builder = builder.tags([tags])
-
-            # Sign and send the event
-            event = await builder.sign(self.signer)
-            result = await self.client.send_event(event)
-
-            # Get the event ID
-            event_id = result.id.to_bech32()
-            print(f"Published listing to Nostr: {event_id}")
-
-            return event_id
-        except Exception as e:
-            print(f"Error publishing to Nostr: {e}")
-            return f"nostr-error-{listing_data.get('id', 'unknown')}"
-
-    async def update_listing(self, event_id: str, listing_data: Dict[Any, Any]) -> str:
-        """
-        Update a listing by creating a new event that references the old one.
-
-        Args:
-            event_id: ID of the event to update
-            listing_data: New listing data
-
-        Returns:
-            Event ID of the updated listing
-        """
-        await self.ensure_connected()
-
-        if not self.client or not self.signer:
-            print("Nostr client not initialized properly")
-            return f"nostr-error-{listing_data.get('id', 'unknown')}"
-
-        try:
-            # Create content - basic description of the listing
-            title = listing_data.get("title", "Untitled Listing")
-            price = listing_data.get("price", 0)
-            condition = listing_data.get("condition", "unknown")
-
-            content = f"📦 {title} (Updated)\nPrice: ${price}\nCondition: {condition}\n\n{listing_data.get('description', '')}"
-
-            # Create tags for better discoverability
-            tags = []
-
-            # Standard tags for marketplace listings
-            tags.append(Tag.parse(["marketplace", "listing"]))
-            tags.append(Tag.parse(["title", title]))
-            tags.append(Tag.parse(["price", str(price)]))
-            tags.append(Tag.parse(["condition", str(condition)]))
-
-            # Add category if available
-            if "category_id" in listing_data:
-                tags.append(Tag.parse(["category", str(listing_data["category_id"])]))
-
-            # Add listing tags
-            for tag in listing_data.get("tags", []):
-                tags.append(Tag.parse(["t", tag]))
-
-            # Add images if available
-            for image in listing_data.get("images", []):
-                if isinstance(image, dict) and "url" in image:
-                    tags.append(Tag.parse(["image", str(image["url"])]))
-                elif isinstance(image, str):
-                    tags.append(Tag.parse(["image", image]))
-
-            # Reference the previous event - need to convert from bech32 to raw id
-            try:
-                # If it's a valid bech32 string, use it directly
-                tags.append(Tag.event(event_id))
-            except Exception:
-                # If it's not a valid bech32 string, it might be a raw ID
-                print(f"Warning: event_id '{event_id}' is not in bech32 format")
-                tags.append(Tag.parse(["e", event_id, "reply"]))
+            # Always add our identifier tag
+            identifier_tag = Tag.identifier(unique_id)
+            tags.append(identifier_tag)
 
             # Create the event builder
             builder = EventBuilder.text_note(content)
 
             # Add tags
             for tag in tags:
-                builder = builder.tag(tag)
+                builder = builder.tags([tag])
 
             # Sign and send the event
             event = await builder.sign(self.signer)
             result = await self.client.send_event(event)
 
-            # Get the event ID
-            new_event_id = result.id.to_bech32()
-            print(f"Updated listing on Nostr: {new_event_id}")
+            # Get the event ID - store only the hex format
+            event_id = event.id().to_hex()
+            event_id_bech32 = event.id().to_bech32()
 
-            return new_event_id
+            print(f"Published event to Nostr: {event_id_bech32} with identifier: {unique_id}")
+
+            return {
+                "event_id": event_id,
+                "identifier": unique_id
+            }
         except Exception as e:
-            print(f"Error updating on Nostr: {e}")
-            return f"nostr-error-{listing_data.get('id', 'unknown')}"
+            print(f"Error publishing to Nostr: {e}")
+            return {
+                "event_id": f"nostr-error-{str(e)}",
+                "identifier": ""
+            }
+
+    async def publish_update(self,
+                             content: str,
+                             previous_event_id: str,
+                             tags: List[Tag] = None) -> Dict[str, str]:
+        """
+        Publish an update to a previous Nostr event, referencing the original event.
+        """
+        await self.ensure_connected()
+
+        if not self.client or not self.signer:
+            print("Nostr client not initialized properly")
+            return {
+                "event_id": "nostr-error-not-initialized",
+                "identifier": ""
+            }
+
+        try:
+            # Generate a unique identifier
+            unique_id = self._generate_unique_id()
+
+            # Initialize tags list if none provided
+            if tags is None:
+                tags = []
+
+            # Add identifier tag
+            identifier_tag = Tag.identifier(unique_id)
+            tags.append(identifier_tag)
+
+            tags.append(Tag.parse(["e", previous_event_id]))
+
+            # Create the event builder
+            builder = EventBuilder.text_note(content)
+
+            # Add all tags - one at a time to avoid issues
+            for tag in tags:
+                builder = builder.tags([tag])
+
+            # Sign and send the event
+            event = await builder.sign(self.signer)
+            result = await self.client.send_event(event)
+
+            # Get the event ID in hex format
+            event_id = event.id().to_hex()
+            event_id_bech32 = event.id().to_bech32()
+
+            print(f"Published update to Nostr: {event_id_bech32} with identifier: {unique_id}")
+
+            return {
+                "event_id": event_id,
+                "identifier": unique_id
+            }
+        except Exception as e:
+            print(f"Error publishing update to Nostr: {e}")
+            return {
+                "event_id": f"nostr-error-{str(e)}",
+                "identifier": ""
+            }
 
     async def close(self):
         """Close connections to relays"""

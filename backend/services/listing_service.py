@@ -1,6 +1,8 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, cast
 from datetime import datetime
 from uuid import UUID, uuid4
+
+from nostr_sdk import Tag, TagKind
 
 from models.listing import ListingCreate, ListingInDB, ListingUpdate
 from database import mongodb
@@ -49,16 +51,27 @@ class ListingService:
 
         return db_listing
 
+    async def get_listing(self, listing_id: str) -> Optional[Dict[Any, Any]]:
+        """
+        Get a listing by ID from MongoDB
+
+        Args:
+            listing_id: ID of the listing
+
+        Returns:
+            Listing data or None if not found
+        """
+        collection = mongodb.db[self.collection_name]
+        listing = await collection.find_one({"_id": listing_id})
+
+        if not listing:
+            return None
+
+        return self._deserialize_listing(listing)
+
     async def create_listing(self, listing_data: ListingCreate, seller_id: UUID) -> ListingInDB:
         """
         Create a new listing in MongoDB and publish to Nostr
-
-        Args:
-            listing_data: Listing data from request
-            seller_id: ID of the seller
-
-        Returns:
-            Created listing with database ID
         """
         # Convert to dict for easier manipulation
         listing_dict = listing_data.dict()
@@ -86,10 +99,32 @@ class ListingService:
 
         # Publish to Nostr
         try:
-            # Get the result of the coroutine, not the coroutine itself
-            nostr_event_id = await nostr_service.publish_listing(listing_dict)
-            mongo_listing["nostr_event_id"] = nostr_event_id
-            listing_dict["nostr_event_id"] = nostr_event_id
+            # Create the Nostr content
+            title = listing_dict.get("title", "Untitled Listing")
+            price = listing_dict.get("price", 0)
+            condition = listing_dict.get("condition", "unknown")
+
+            content = f"📦 {title}\nPrice: ${price}\nCondition: {condition}\n\n{listing_dict.get('description', '')}"
+
+            # Create tags for the Nostr event
+            tags = [
+                Tag.custom(cast(TagKind, TagKind.TITLE()), [title]),
+                Tag.custom(cast(TagKind, TagKind.AMOUNT()), [str(price)]),
+                Tag.custom(cast(TagKind, TagKind.DESCRIPTION()), [condition]),
+            ]
+
+            # Publish to Nostr using the generic publish_event method
+            nostr_result = await nostr_service.publish_event(content, tags)
+
+            # Store the Nostr data in MongoDB
+            mongo_listing["nostr_event_id"] = nostr_result["event_id"]
+            mongo_listing["nostr_identifier"] = nostr_result["identifier"]
+            mongo_listing["nostr_event_history"] = []  # Initialize empty history list
+
+            # Add to the return object
+            listing_dict["nostr_event_id"] = nostr_result["event_id"]
+            listing_dict["nostr_identifier"] = nostr_result["identifier"]
+            listing_dict["nostr_event_history"] = []  # Initialize empty history list
         except Exception as e:
             print(f"Error publishing to Nostr: {e}")
             # Continue anyway, we can sync later
@@ -101,47 +136,18 @@ class ListingService:
         # Return the created listing
         return ListingInDB(**listing_dict)
 
-    async def get_listing(self, listing_id: str) -> Optional[Dict[Any, Any]]:
-        """
-        Get a listing by ID from MongoDB
-
-        Args:
-            listing_id: ID of the listing
-
-        Returns:
-            Listing data or None if not found
-        """
-        collection = mongodb.db[self.collection_name]
-        listing = await collection.find_one({"_id": listing_id})
-
-        if not listing:
-            return None
-
-        return self._deserialize_listing(listing)
-
     async def update_listing(self, listing_id: str, listing_update: ListingUpdate) -> Optional[Dict[Any, Any]]:
-        """
-        Update a listing in MongoDB and Nostr
-
-        Args:
-            listing_id: ID of the listing to update
-            listing_update: New listing data
-
-        Returns:
-            Updated listing or None if not found
-        """
+        # Get existing listing
         collection = mongodb.db[self.collection_name]
-
-        # Get the existing listing
         existing = await collection.find_one({"_id": listing_id})
+
         if not existing:
             return None
 
-        # Convert to a mutable dict and deserialize
+        # Deserialize and apply updates
         existing = self._deserialize_listing(existing)
-
-        # Apply updates
         update_data = listing_update.dict(exclude_unset=True)
+
         for key, value in update_data.items():
             existing[key] = value
 
@@ -151,178 +157,63 @@ class ListingService:
         # Prepare for MongoDB update
         mongo_listing = self._serialize_listing(existing)
 
-        # Update in MongoDB
-        result = await collection.replace_one({"_id": listing_id}, mongo_listing)
+        # Initialize event history if it doesn't exist
+        if "nostr_event_history" not in mongo_listing:
+            mongo_listing["nostr_event_history"] = []
+            print(f"Initializing nostr_event_history for listing {listing_id}")
 
-        if result.modified_count == 0:
-            return None
-
-        # Update in Nostr if we have a Nostr event ID
-        if "nostr_event_id" in existing and existing["nostr_event_id"]:
+        # Update in Nostr if we have a previous event ID
+        if "nostr_event_id" in existing:
             try:
-                new_event_id = await nostr_service.update_listing(
+                print(f"Updating Nostr event, current history length: {len(mongo_listing['nostr_event_history'])}")
+
+                # Save current event to history before updating
+                previous_event = {
+                    "event_id": existing.get("nostr_event_id", ""),
+                    "identifier": existing.get("nostr_identifier", ""),
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+                # Add to history
+                mongo_listing["nostr_event_history"].append(previous_event)
+                print(f"Added previous event to history, new length: {len(mongo_listing['nostr_event_history'])}")
+
+                # Format content for Nostr
+                title = existing.get("title", "Untitled Listing")
+                price = existing.get("price", 0)
+                condition = existing.get("condition", "unknown")
+                content = f"📦 {title} (Updated)\nPrice: ${price}\nCondition: {condition}\n\n{existing.get('description', '')}"
+
+                # Create tags for updated listing
+                tags = [
+                    Tag.custom(cast(TagKind, TagKind.TITLE()), [title]),
+                    Tag.custom(cast(TagKind, TagKind.AMOUNT()), [str(price)]),
+                    Tag.custom(cast(TagKind, TagKind.DESCRIPTION()), [condition]),
+                ]
+
+                # Publish update to Nostr
+                nostr_result = await nostr_service.publish_update(
+                    content,
                     existing["nostr_event_id"],
-                    existing
+                    tags
                 )
-                # Update the Nostr event ID in MongoDB
-                await collection.update_one(
-                    {"_id": listing_id},
-                    {"$set": {"nostr_event_id": new_event_id}}
-                )
-                existing["nostr_event_id"] = new_event_id
+
+                # Update MongoDB with new Nostr event ID
+                mongo_listing["nostr_event_id"] = nostr_result["event_id"]
+                mongo_listing["nostr_identifier"] = nostr_result["identifier"]
+
+                # Update return object
+                existing["nostr_event_id"] = mongo_listing["nostr_event_id"]
+                existing["nostr_identifier"] = mongo_listing["nostr_identifier"]
+                existing["nostr_event_history"] = mongo_listing["nostr_event_history"]
+
+                print(f"Updated Nostr event, history now has {len(mongo_listing['nostr_event_history'])} entries")
             except Exception as e:
                 print(f"Error updating in Nostr: {e}")
-                # Continue anyway
+
+        # Update in MongoDB
+        await collection.replace_one({"_id": listing_id}, mongo_listing)
 
         return existing
-
-    async def delete_listing(self, listing_id: str) -> bool:
-        """
-        Delete a listing from MongoDB only (not from Nostr)
-
-        Args:
-            listing_id: ID of the listing to delete
-
-        Returns:
-            True if successful, False otherwise
-        """
-        collection = mongodb.db[self.collection_name]
-
-        # Get the listing first to check if it exists
-        listing = await collection.find_one({"_id": listing_id})
-
-        if not listing:
-            return False
-
-        # Delete from MongoDB
-        result = await collection.delete_one({"_id": listing_id})
-
-        return result.deleted_count > 0
-
-    async def search_listings(self, params: Dict[str, Any]) -> List[Dict[Any, Any]]:
-        """
-        Search for listings with filters
-
-        Args:
-            params: Search parameters
-
-        Returns:
-            List of matching listings
-        """
-        collection = mongodb.db[self.collection_name]
-
-        # Build the query
-        query = {}
-
-        # Status filter
-        if "status" in params and params["status"]:
-            query["status"] = params["status"]
-
-        # Keyword search
-        if "keyword" in params and params["keyword"]:
-            keyword = params["keyword"]
-            query["$or"] = [
-                {"title": {"$regex": keyword, "$options": "i"}},
-                {"description": {"$regex": keyword, "$options": "i"}}
-            ]
-
-        # Category filter
-        if "category_id" in params and params["category_id"]:
-            query["category_id"] = params["category_id"]
-
-        # Price range
-        price_filter = {}
-        if "min_price" in params and params["min_price"] is not None:
-            price_filter["$gte"] = params["min_price"]
-        if "max_price" in params and params["max_price"] is not None:
-            price_filter["$lte"] = params["max_price"]
-        if price_filter:
-            query["price"] = price_filter
-
-        # Condition filter
-        if "condition" in params and params["condition"]:
-            query["condition"] = params["condition"]
-
-        # Seller filter
-        if "seller_id" in params and params["seller_id"]:
-            query["seller_id"] = str(params["seller_id"])
-
-        # Auction filter
-        if "is_auction" in params and params["is_auction"] is not None:
-            query["is_auction"] = params["is_auction"]
-
-        # Sort options
-        sort_field = params.get("sort_by", "created_at")
-        sort_order = 1 if params.get("sort_order", "desc") == "asc" else -1
-        sort_options = [(sort_field, sort_order)]
-
-        # Pagination
-        skip = params.get("offset", 0)
-        limit = params.get("limit", 20)
-
-        # Execute query
-        cursor = collection.find(query).sort(sort_options).skip(skip).limit(limit)
-
-        # Process results
-        results = []
-        async for document in cursor:
-            results.append(self._deserialize_listing(document))
-
-        return results
-
-    async def increment_view_count(self, listing_id: str) -> bool:
-        """
-        Increment the view count for a listing
-
-        Args:
-            listing_id: ID of the listing
-
-        Returns:
-            True if successful, False otherwise
-        """
-        collection = mongodb.db[self.collection_name]
-        result = await collection.update_one(
-            {"_id": listing_id},
-            {"$inc": {"views_count": 1}}
-        )
-        return result.modified_count > 0
-
-    async def sync_with_nostr(self, listing_id: str) -> bool:
-        """
-        Republish a listing to Nostr if it doesn't have a Nostr event ID
-
-        Args:
-            listing_id: ID of the listing
-
-        Returns:
-            True if successful, False otherwise
-        """
-        collection = mongodb.db[self.collection_name]
-        listing = await collection.find_one({"_id": listing_id})
-
-        if not listing:
-            return False
-
-        if "nostr_event_id" in listing and listing["nostr_event_id"]:
-            # Already has a Nostr event ID
-            return True
-
-        # Deserialize for Nostr
-        listing_dict = self._deserialize_listing(listing)
-
-        # Publish to Nostr
-        try:
-            nostr_event_id = await nostr_service.publish_listing(listing_dict)
-            # Update the Nostr event ID in MongoDB
-            await collection.update_one(
-                {"_id": listing_id},
-                {"$set": {"nostr_event_id": nostr_event_id}}
-            )
-            return True
-        except Exception as e:
-            print(f"Error publishing to Nostr: {e}")
-            return False
-
 
 # Create a service instance
 listing_service = ListingService()
