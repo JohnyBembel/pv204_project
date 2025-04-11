@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from models import User
+from models.user import User
 from database import mongodb
 
 router = APIRouter(

@@ -73,7 +73,6 @@ class ListingBase(BaseModel):
     category_id: int
     price: float = Field(gt=0)
     quantity: int = Field(ge=1, default=1)
-    is_auction: bool = False
     shipping_options: List[ShippingOption] = [ShippingOption.STANDARD]
     shipping_price: float = Field(ge=0)
     location: Address
@@ -102,7 +101,7 @@ class ListingInDB(ListingBase):
     category: Optional[Category] = None
     seller: Optional[SellerInfo] = None
     bid_info: Optional[BidInfo] = None
-    nostr_event_id: Optional[str] = None  # Store Nostr event ID
+    nostr_event_id: Optional[str] = None
 
     class Config:
         orm_mode = True
