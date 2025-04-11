@@ -22,7 +22,7 @@ class UserService:
                 print(f"Public key starts with '{prefix}'")
                 return private_key, public_key
 
-    async def register_user(self) -> dict:
+    async def register_user(self,lightning_address: str) -> dict:
         """
         Register a new user by generating a Nostr key pair.
         Only the public key is stored in the database.
@@ -41,6 +41,7 @@ class UserService:
             "id": str(user_id),
             "nostr_public_key": public_key.to_bech32(),
             "created_at": created_at,
+            "lighting_address": lightning_address,
         }
         # MongoDB document _id is set to the user's id (as a string)
         user_record["_id"] = str(user_id)
@@ -56,6 +57,7 @@ class UserService:
             "nostr_public_key": public_key.to_bech32(),
             "nostr_private_key": private_key.to_bech32(),  # Return the private key to the user
             "created_at": created_at,
+            "lightning_address": lightning_address,
         }
         return response
 

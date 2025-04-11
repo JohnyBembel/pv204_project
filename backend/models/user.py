@@ -6,3 +6,4 @@ class UserResponse(BaseModel):
     nostr_public_key: str
     nostr_private_key: str
     created_at: datetime
+    lightning_address: str
