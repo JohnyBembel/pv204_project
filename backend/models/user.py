@@ -1,9 +1,8 @@
 from pydantic import BaseModel
-from typing import Optional
+from datetime import datetime
 
-class User(BaseModel):
-    username: str
-    email: str
-    full_name: Optional[str] = None
-    age: Optional[int] = None
-    active: bool = False
+class UserResponse(BaseModel):
+    id: str
+    nostr_public_key: str
+    nostr_private_key: str
+    created_at: datetime

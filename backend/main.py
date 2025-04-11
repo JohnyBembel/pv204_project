@@ -5,8 +5,10 @@ import secrets
 import hashlib
 
 from database import mongodb
-from routers import listings, users
+from routers import listings, users, auth
 from services.nostr_service import nostr_service
+from services.user_service import user_service
+
 
 # Create a lifespan context manager
 @asynccontextmanager
@@ -52,6 +54,8 @@ app.add_middleware(
 )
 
 app.include_router(listings.router)
+app.include_router(users.router)
+app.include_router(auth.router)
 
 @app.get("/")
 async def root():

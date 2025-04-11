@@ -1,15 +1,9 @@
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query
-from typing import List, Optional
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from typing import List, Dict, Any
 from uuid import UUID, uuid4
-from datetime import datetime
 
-from models.listing import (
-    ListingCreate,
-    ListingResponse,
-    ListingUpdate,
-    ListingSearchParams,
-    ListingCondition
-)
+from auth.dependencies import get_current_user
+from models.listing import ListingCreate, ListingResponse, ListingUpdate, ListingSearchParams
 from services.listing_service import listing_service
 
 router = APIRouter(
@@ -18,26 +12,24 @@ router = APIRouter(
     responses={404: {"description": "Listing not found"}},
 )
 
-
 @router.post("/", response_model=ListingResponse)
-async def create_listing(listing: ListingCreate, background_tasks: BackgroundTasks):
+async def create_listing(
+    listing: ListingCreate,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
     """
-    Create a new marketplace listing
-
-    - Stores in MongoDB
-    - Publishes to Nostr network
+    Create a new listing.
+    This endpoint requires a valid Noise session token (provided in header 'x_noise-token') to prove that the
+    user has been authenticated using their private key.
     """
-    # In a real app, you would get seller_id from authentication
-    # For now, we'll create a dummy seller ID
-    seller_id = uuid4()
+    # Get the seller ID from the authenticated user
+    seller_id = UUID(current_user["id"]) if "id" in current_user else uuid4()
 
-    # Create the listing
     try:
         result = await listing_service.create_listing(listing, seller_id)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating listing: {str(e)}")
-
 
 @router.get("/", response_model=List[ListingResponse])
 async def search_listings(params: ListingSearchParams = Depends()):
