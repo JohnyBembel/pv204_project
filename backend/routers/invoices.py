@@ -3,7 +3,10 @@ from decimal import Decimal
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from typing import List, Dict, Any
 from uuid import UUID, uuid4
+from fastapi import APIRouter, HTTPException
 
+from models.invoice import Invoice
+from datetime import datetime
 from auth.dependencies import get_current_user
 from models.listing import ListingCreate, ListingResponse, ListingUpdate, ListingSearchParams
 from pydantic import BaseModel
@@ -32,16 +35,26 @@ async def get_nwc_info(nwc_string: str):
         # Handle any errors that may occur
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/create_invoice/", response_model=Invoice)
-async def create_invoice(nwc_seller_string:str,amount:int,description:str):
-    """Create a new Lightning Network invoice."""
+@router.post("/create_invoice/")
+async def create_invoice(seller_ln_address: str, amount: int, description: str):
     try:
-        # Create an instance of the InvoiceService and call create_invoice
-        invoice_service = InvoiceService()
-        invoice = await invoice_service.create_invoice(nwc_seller_string,amount,description)
-        return invoice  # FastAPI will serialize the Invoice object to JSON automatically
+
+        new_invoice = await invoice_service.create_invoice(seller_ln_address, amount, description)
+
+        invoice_data = Invoice(
+            type="zap",
+            invoice=new_invoice['invoice'],
+            description=new_invoice['description'],
+            payment_hash=new_invoice['payment_hash'],
+            amount=new_invoice['amount'],
+            fees_paid=new_invoice['fees_paid'],
+            created_at=datetime.now().timestamp()
+        )
+
+        return invoice_data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating invoice: {e}")
+        raise HTTPException(status_code=500, detail=f"Error creating zap invoice: {e}")
+
 
 @router.get("/check_invoice_status/")
 async def check_invoice_status(nwc_string:str,invoicestr: str):

@@ -2,13 +2,12 @@ import urllib
 from typing import List, Dict, Any, Optional, cast
 from datetime import datetime
 from uuid import UUID, uuid4
-
-from nostr_sdk import Tag, TagKind
-
+import urllib.parse
+import httpx
+from datetime import datetime
 from models.listing import ListingCreate, ListingInDB, ListingUpdate
 from models.invoice import Invoice
 from database import mongodb
-from pydantic.validators import Decimal
 from services.nostr_service import nostr_service
 
 from services.nwc import processNWCstring, makeInvoice, getInfo, checkInvoice, tryToPayInvoice, didPaymentSucceed
@@ -23,19 +22,48 @@ class InvoiceService:
     async def get_nwc_info(self,nwc_string: str) -> Any:
         return processNWCstring(nwc_string)
 
-    async def create_invoice(self,nwc_seller_string, amount: int, description="") -> Invoice:
-        nwc_info = processNWCstring(nwc_seller_string)
-        nwc_info['relay'] = urllib.parse.unquote(nwc_info['relay'])
-        amnt = amount
-        if description:
-            desc = description
+    async def get_lnurl_info(self, lightning_address: str) -> dict:
+        """Resolve a Nostr Lightning Address to its LNURL-pay endpoint"""
         try:
-            invoice_info = makeInvoice(nwc_info, amnt, desc)
+            username, domain = lightning_address.split("@")
+            url = f"https://{domain}/.well-known/lnurlp/{username}"
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url)
+                resp.raise_for_status()
+                return resp.json()
         except Exception as e:
-            print(f"Error creating an invoice: {e}")
-        invoice = Invoice(**invoice_info["result"])
+            raise RuntimeError(f"Failed to resolve LNURL: {e}")
 
-        return invoice
+    async def create_invoice(self, lightning_address: str, amount_sats: int, comment: str = "") -> dict:
+        """Request an invoice from a Nostr Lightning Address"""
+        try:
+            lnurl_info = await self.get_lnurl_info(lightning_address)
+            callback_url = lnurl_info["callback"]
+            params = {
+                "amount": amount_sats * 1000,
+            }
+            if comment:
+                params["comment"] = comment
+            full_url = f"{callback_url}?{urllib.parse.urlencode(params)}"
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(full_url)
+                resp.raise_for_status()
+                response_data = resp.json()
+
+                invoice_data = {
+                    "type": "zap",
+                    "invoice": response_data.get("pr", ""),
+                    "payment_hash": response_data.get("payment_hash", ""),
+                    "amount": amount_sats,
+                    "fees_paid": 0,
+                    "description": comment,
+                    "created_at": datetime.now().timestamp(),
+                }
+
+                return invoice_data
+
+        except Exception as e:
+            raise RuntimeError(f"Failed to create an invoice: {e}")
 
     async def check_invoice_status(self,nwc_string,invoicestr) -> Invoice:
         nwc_info = processNWCstring(nwc_string)
