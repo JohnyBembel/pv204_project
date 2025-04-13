@@ -3,9 +3,12 @@ from decimal import Decimal
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from typing import List, Dict, Any
 from uuid import UUID, uuid4
+from fastapi import APIRouter, HTTPException
 
+from models.invoice import Invoice
+from datetime import datetime
 from auth.dependencies import get_current_user
-from models.listing import ListingCreate, ListingResponse, ListingUpdate
+from models.listing import ListingCreate, ListingResponse, ListingUpdate, ListingSearchParams
 from pydantic import BaseModel
 from services.listing_service import listing_service
 from models.invoice import Invoice
@@ -13,12 +16,6 @@ from models.invoice import Invoice
 from services.invoice_service import invoice_service
 
 from services.invoice_service import InvoiceService
-
-
-class CreateInvoiceRequest(BaseModel):
-    amount: int
-    description: str = ""
-
 
 
 router = APIRouter(
@@ -38,13 +35,41 @@ async def get_nwc_info(nwc_string: str):
         # Handle any errors that may occur
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/", response_model=Invoice)
-async def create_invoice(request: CreateInvoiceRequest):
-    """Create a new Lightning Network invoice."""
+@router.post("/create_invoice/")
+async def create_invoice(seller_ln_address: str, amount: int, description: str):
     try:
-        # Create an instance of the InvoiceService and call create_invoice
-        invoice_service = InvoiceService()
-        invoice = await invoice_service.create_invoice(request.amount, request.description)
-        return invoice  # FastAPI will serialize the Invoice object to JSON automatically
+
+        new_invoice = await invoice_service.create_invoice(seller_ln_address, amount, description)
+
+        invoice_data = Invoice(
+            type="zap",
+            invoice=new_invoice['invoice'],
+            description=new_invoice['description'],
+            payment_hash=new_invoice['payment_hash'],
+            amount=new_invoice['amount'],
+            fees_paid=new_invoice['fees_paid'],
+            created_at=datetime.now().timestamp()
+        )
+
+        return invoice_data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating invoice: {e}")
+        raise HTTPException(status_code=500, detail=f"Error creating zap invoice: {e}")
+
+
+@router.get("/check_invoice_status/")
+async def check_invoice_status(nwc_string:str,invoicestr: str):
+    """Get Lightning Network invoice status."""
+    result = await invoice_service.check_invoice_status(nwc_string,invoicestr)
+    return result
+
+@router.post("/try_to_pay_invoice/")
+async def try_to_pay_invoice(nwc_buyer_string:str,invoicestr: str):
+    """Try to pay an LN invoice."""
+    result = await invoice_service.try_to_pay_invoice(nwc_buyer_string,invoicestr)
+    return result
+
+@router.get("/check_payment/")
+async def check_payment(nwc_buyer_string:str,invoicestr: str):
+    """Verify LN payment status."""
+    result = await invoice_service.check_payment(nwc_buyer_string,invoicestr)
+    return result
