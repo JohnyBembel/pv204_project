@@ -5,14 +5,14 @@ from typing import List, Dict, Any
 from uuid import UUID, uuid4
 
 from auth.dependencies import get_current_user
-from models.listing import ListingCreate, ListingResponse, ListingUpdate, ListingSearchParams
+from models.listing import ListingCreate, ListingResponse, ListingUpdate
 from pydantic import BaseModel
 from services.listing_service import listing_service
 from models.invoice import Invoice
 
 from services.invoice_service import invoice_service
 
-from backend.services.invoice_service import InvoiceService
+from services.invoice_service import InvoiceService
 
 
 class CreateInvoiceRequest(BaseModel):

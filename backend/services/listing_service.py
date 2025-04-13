@@ -69,6 +69,18 @@ class ListingService:
 
         return self._deserialize_listing(listing)
 
+    async def get_all_listings(self) -> List[Dict[Any, Any]]:
+        """
+        Return all listings from MongoDB.
+        """
+        collection = mongodb.db[self.collection_name]
+        cursor = collection.find({})
+        listings = []
+        async for listing in cursor:
+            listings.append(self._deserialize_listing(listing))
+        return listings
+
+
     async def create_listing(self, listing_data: ListingCreate, seller_id: UUID) -> ListingInDB:
         """
         Create a new listing in MongoDB and publish to Nostr

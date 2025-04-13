@@ -14,25 +14,9 @@ class ListingCondition(str, Enum):
     FOR_PARTS = "for_parts"
 
 
-class ShippingOption(str, Enum):
-    STANDARD = "standard"
-    EXPEDITED = "expedited"
-    ONE_DAY = "one_day"
-    PICKUP_ONLY = "pickup_only"
-    FREE = "free"
-
-
 class ListingStatus(str, Enum):
     ACTIVE = "active"
-    SOLD = "sold"
     ENDED = "ended"
-    DRAFT = "draft"
-
-
-class Category(BaseModel):
-    id: int
-    name: str
-    parent_id: Optional[int] = None
 
 
 class Image(BaseModel):
@@ -41,30 +25,17 @@ class Image(BaseModel):
     description: Optional[str] = None
 
 
-class Address(BaseModel):
-    city: str
-    state: str
-    country: str
-    postal_code: str
-    street_address: Optional[str] = None
-
-
 class SellerInfo(BaseModel):
-    id: UUID
-    username: str
-    rating: float = Field(ge=0, le=5)
-    reviews_count: int = 0
-    joined_date: datetime
-    location: Optional[Address] = None
+    nostr_public_key: str
+    name: Optional[str] = None
+    about: Optional[str] = None
+    picture: Optional[str] = None
 
-
-class BidInfo(BaseModel):
-    current_price: float = Field(gt=0)
-    bid_count: int = 0
-    highest_bidder_id: Optional[UUID] = None
-    start_time: datetime
-    end_time: datetime
-
+    @validator('nostr_public_key')
+    def check_pubkey(cls, v):
+        if not v.startswith("npub"):
+            raise ValueError("Invalid Nostr public key (should start with 'npub')")
+        return v
 
 class ListingBase(BaseModel):
     title: str = Field(..., min_length=3, max_length=80)
@@ -73,9 +44,7 @@ class ListingBase(BaseModel):
     category_id: int
     price: float = Field(gt=0)
     quantity: int = Field(ge=1, default=1)
-    shipping_options: List[ShippingOption] = [ShippingOption.STANDARD]
     shipping_price: float = Field(ge=0)
-    location: Address
     tags: List[str] = []
 
     @validator('tags')
@@ -90,17 +59,16 @@ class ListingCreate(ListingBase):
 
 
 class ListingInDB(ListingBase):
-    id: UUID = Field(default_factory=uuid4)
+    id: UUID
     seller_id: UUID
     images: List[Image]
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime
+    updated_at: datetime
     status: ListingStatus = ListingStatus.ACTIVE
     views_count: int = 0
     favorite_count: int = 0
-    category: Optional[Category] = None
+    category: str
     seller: Optional[SellerInfo] = None
-    bid_info: Optional[BidInfo] = None
     nostr_event_id: Optional[str] = None
 
     class Config:
@@ -118,8 +86,6 @@ class ListingUpdate(BaseModel):
     category_id: Optional[int] = None
     price: Optional[float] = Field(None, gt=0)
     quantity: Optional[int] = Field(None, ge=1)
-    shipping_options: Optional[List[ShippingOption]] = None
-    shipping_price: Optional[float] = Field(None, ge=0)
     status: Optional[ListingStatus] = None
     tags: Optional[List[str]] = None
 
@@ -128,18 +94,3 @@ class ListingUpdate(BaseModel):
         if v is not None and len(v) > 20:
             raise ValueError('Maximum 20 tags allowed')
         return v
-
-
-class ListingSearchParams(BaseModel):
-    keyword: Optional[str] = None
-    category_id: Optional[int] = None
-    min_price: Optional[float] = Field(None, ge=0)
-    max_price: Optional[float] = Field(None, gt=0)
-    condition: Optional[ListingCondition] = None
-    seller_id: Optional[UUID] = None
-    is_auction: Optional[bool] = None
-    status: Optional[ListingStatus] = ListingStatus.ACTIVE
-    sort_by: Optional[str] = "created_at"
-    sort_order: Optional[str] = "desc"
-    limit: int = 20
-    offset: int = 0

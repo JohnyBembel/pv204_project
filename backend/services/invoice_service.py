@@ -11,7 +11,7 @@ from database import mongodb
 from pydantic.validators import Decimal
 from services.nostr_service import nostr_service
 
-from backend.services.nwc import processNWCstring, makeInvoice, getInfo
+from services.nwc import processNWCstring, makeInvoice, getInfo
 
 
 class InvoiceService:

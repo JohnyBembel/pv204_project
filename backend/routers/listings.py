@@ -3,7 +3,7 @@ from typing import List, Dict, Any
 from uuid import UUID, uuid4
 
 from auth.dependencies import get_current_user
-from models.listing import ListingCreate, ListingResponse, ListingUpdate, ListingSearchParams
+from models.listing import ListingCreate, ListingResponse, ListingUpdate
 from services.listing_service import listing_service
 
 router = APIRouter(
@@ -31,19 +31,17 @@ async def create_listing(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating listing: {str(e)}")
 
-@router.get("/", response_model=List[ListingResponse])
-async def search_listings(params: ListingSearchParams = Depends()):
+@router.get("/all", response_model=List[ListingResponse])
+async def get_all_listings():
     """
-    Search for listings with various filters
+    Return all listings from MongoDB.
     """
-    # Create search parameters
-    search_params = params.dict()
-
     try:
-        results = await listing_service.search_listings(search_params)
+        results = await listing_service.get_all_listings()
         return results
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error searching listings: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving listings: {str(e)}")
+
 
 
 @router.get("/{listing_id}", response_model=ListingResponse)

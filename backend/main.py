@@ -1,10 +1,12 @@
+import json
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import secrets 
-import hashlib
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from starlette.types import Message
 
-from backend.routers import invoices
+from routers import invoices
 from database import mongodb
 from routers import listings, users, auth
 from services.nostr_service import nostr_service
@@ -46,6 +48,30 @@ async def lifespan(app: FastAPI):
 # Pass the lifespan to FastAPI
 app = FastAPI(lifespan=lifespan)
 
+
+@app.middleware("http")
+async def log_request_body(request: Request, call_next):
+    # Only log for POST requests (or check request.url.path for specific endpoints)
+    if request.method == "POST":
+        # Read the body. Note that reading it consumes it.
+        body_bytes = await request.body()
+        # Print the raw body. If the body is JSON, you can also pretty-print it.
+        try:
+            body = body_bytes.decode("utf-8")
+            parsed_body = json.loads(body)
+            print("DEBUG: Incoming request body:", json.dumps(parsed_body, indent=2))
+        except Exception:
+            print("DEBUG: Incoming request body (raw):", body_bytes)
+
+        # Create a new receive function so downstream handlers can read the body again.
+        async def receive() -> Message:
+            return {"type": "http.request", "body": body_bytes}
+
+        # Replace the request's stream with our custom receive function.
+        request._receive = receive
+
+    response = await call_next(request)
+    return response
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # For development - restrict in production
