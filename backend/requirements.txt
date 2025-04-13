@@ -5,6 +5,8 @@ charset-normalizer==3.4.1
 dnspython==2.7.0
 dotenv==0.9.9
 fastapi==0.115.11
+httpcore==1.0.8
+httpx==0.28.1
 idna==3.10
 mailersend==0.5.8
 motor==3.7.0

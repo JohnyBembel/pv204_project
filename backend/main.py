@@ -6,7 +6,7 @@ import hashlib
 
 from backend.routers import invoices
 from database import mongodb
-from routers import listings, users, auth
+from routers import listings, users, auth, zaps
 from services.nostr_service import nostr_service
 from services.user_service import user_service
 
@@ -59,6 +59,8 @@ app.include_router(users.router)
 app.include_router(auth.router)
 
 app.include_router(invoices.router)
+
+app.include_router(zaps.router)
 
 @app.get("/")
 async def root():
