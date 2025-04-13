@@ -234,6 +234,7 @@ def checkInvoice(nwc_obj, invoice=None, payment_hash=None):
     ersp = response[ "content" ]
     drsp = decrypt( nwc_obj[ "app_privkey" ], nwc_obj[ "wallet_pubkey" ], ersp )
     dobj = json.loads( drsp )
+    print(json.dumps(dobj, indent=2))
     return dobj
     # an error looks like this:
     # {error: {code: "INTERNAL", message: "Something went wrong while looking up invoice: "}, result_type: "lookup_invoice"}

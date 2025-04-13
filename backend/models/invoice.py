@@ -4,5 +4,10 @@ from pydantic import BaseModel
 from datetime import datetime
 
 class Invoice(BaseModel):
-    amnt: Decimal
-    desc: str
+    type: str
+    invoice: str
+    description: str
+    payment_hash: str
+    amount: int
+    fees_paid: int
+    created_at: int
