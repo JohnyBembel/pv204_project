@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from models.invoice import Invoice
 from datetime import datetime
 from auth.dependencies import get_current_user
-from models.listing import ListingCreate, ListingResponse, ListingUpdate, ListingSearchParams
+from models.listing import ListingCreate, ListingResponse, ListingUpdate
 from pydantic import BaseModel
 from services.listing_service import listing_service
 from models.invoice import Invoice
