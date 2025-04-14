@@ -1,15 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import './App.css';
 import nacl from 'tweetnacl';
 import { nip19 } from 'nostr-tools';
 import { Buffer } from 'buffer';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 // Import WASM loader and other necessary items from @rust-nostr/nostr-sdk
-import { loadWasmSync, Keys, SecretKey } from '@rust-nostr/nostr-sdk';
+import { loadWasmSync } from '@rust-nostr/nostr-sdk';
+import { AuthProvider, AuthContext } from './AuthContext';
+import ProtectedRoute from './ProtectedRoute';
 
 window.Buffer = Buffer;
 loadWasmSync();
 
-function App() {
+function NostrAuth() {
   // Registration state
   const [lightningAddress, setLightningAddress] = useState('');
   const [publicKey, setPublicKey] = useState('');
@@ -28,10 +31,53 @@ function App() {
   // UI / status state
   const [status, setStatus] = useState('');
 
+  // Auth context
+  const { setIsLoggedIn, setAuthToken, setUserPublicKey } = useContext(AuthContext);
+  
+  // Function to validate stored tokens
+  const validateToken = async (token) => {
+    try {
+      const response = await fetch('http://localhost:8000/auth/validate', {
+        headers: { 'session-token': token }
+      });
+      
+      if (!response.ok) {
+        // Token is invalid or expired, clear localStorage
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('userPublicKey');
+        setToken('');
+        setPublicKey('');
+        setAuthToken('');
+        setUserPublicKey('');
+        setIsLoggedIn(false);
+        setStatus('Your session has expired. Please login again.');
+      } else {
+        setStatus('You are authenticated. Token is valid.');
+      }
+    } catch (error) {
+      setStatus('Error validating token. Please try again.');
+    }
+  };
+
+  // Check for existing authentication on component mount
+  useEffect(() => {
+    const savedToken = localStorage.getItem('authToken');
+    const savedPublicKey = localStorage.getItem('userPublicKey');
+    
+    if (savedToken && savedPublicKey) {
+      setToken(savedToken);
+      setPublicKey(savedPublicKey);
+      
+      setAuthToken(savedToken);
+      setUserPublicKey(savedPublicKey);
+      setIsLoggedIn(true);
+      
+      validateToken(savedToken);
+    }
+  }, [setAuthToken, setUserPublicKey, setIsLoggedIn]);
+
   /**
-   * decodeNsecToRawSeedFallback:
-   * Fallback: decode an nsec string using nip19.decode.
-   * Only used if no raw seed is present from registration.
+   * Decode a Nostr private key (nsec format) to raw seed bytes
    */
   function decodeNsecToRawSeedFallback(nsec) {
     try {
@@ -39,11 +85,8 @@ function App() {
       if (decoded.type !== 'nsec') {
         throw new Error(`Not a valid nsec key. Got type: ${decoded.type}`);
       }
-      console.debug("DEBUG: Fallback raw seed (uint8):", decoded.data);
-      console.debug("DEBUG: Fallback raw seed (hex):", Buffer.from(decoded.data).toString("hex"));
       return decoded.data;
     } catch (e) {
-      console.error("Failed to decode nsec key using nip19 fallback", e);
       throw e;
     }
   }
@@ -63,7 +106,6 @@ function App() {
       });
       if (!response.ok) throw new Error(response.statusText);
       const data = await response.json();
-      console.debug("DEBUG (Register): Response data:", data);
       setPublicKey(data.nostr_public_key);
       setRegPrivateKey(data.nostr_private_key);
       setRawSeed(data.raw_seed); // Store the raw seed (hex) from registration
@@ -85,7 +127,6 @@ function App() {
       const response = await fetch(url);
       if (!response.ok) throw new Error(response.statusText);
       const data = await response.json();
-      console.debug("DEBUG (Challenge): Response data:", data);
       setChallengeSessionId(data.session_id);
       setChallenge(data.challenge);
       setStatus(`Challenge received: ${data.challenge}`);
@@ -106,31 +147,21 @@ function App() {
     }
     setStatus('Signing and verifying challenge...');
     try {
-      // IMPORTANT: Use the raw seed to create a nacl signing key
-      // Since we're having trouble with the SDK's signing method
+      // Get raw seed from either stored seed or private key
       let rawSeedArray;
       if (rawSeed) {
         rawSeedArray = Buffer.from(rawSeed, "hex");
-        console.debug("DEBUG: Using rawSeed from registration:", rawSeedArray.toString("hex"));
       } else {
-        // Fall back to the private key
         rawSeedArray = decodeNsecToRawSeedFallback(regPrivateKey);
       }
-      console.debug("DEBUG: Raw seed length =", rawSeedArray.length);
       
       // Generate key pair from raw seed using tweetnacl
       const keyPair = nacl.sign.keyPair.fromSeed(new Uint8Array(rawSeedArray));
       
-      // Get the challenge bytes
+      // Get the challenge bytes and sign them
       const challengeBytes = new TextEncoder().encode(challenge);
-      console.debug("DEBUG: Challenge bytes:", challengeBytes);
-      
-      // Sign the challenge using tweetnacl
       const signature = nacl.sign.detached(challengeBytes, keyPair.secretKey);
       const signatureB64 = Buffer.from(signature).toString('base64');
-      
-      console.debug("DEBUG: signature (hex) =", Buffer.from(signature).toString("hex"));
-      console.debug("DEBUG: signature (b64) =", signatureB64);
 
       // Send signature to backend for verification
       const response = await fetch('http://localhost:8000/auth/verify', {
@@ -143,10 +174,19 @@ function App() {
       });
       if (!response.ok) throw new Error(response.statusText);
       const data = await response.json();
-      console.debug("DEBUG (Verify): Response data:", data);
+      
       if (data.authenticated) {
         setToken(data.token);
-        setStatus(`Signature verified! Token: ${data.token}`);
+        
+        localStorage.setItem('authToken', data.token);
+        localStorage.setItem('userPublicKey', publicKey);
+        
+        // Set login state in the context
+        setAuthToken(data.token);
+        setUserPublicKey(publicKey);
+        setIsLoggedIn(true);
+        
+        setStatus(`Authentication successful! You're now logged in.`);
       } else {
         setStatus("Signature verification failed on server.");
       }
@@ -170,11 +210,13 @@ function App() {
       });
       if (!response.ok) throw new Error(response.statusText);
       const data = await response.json();
-      console.debug("DEBUG (Login): Response data:", data);
       setPublicKey(data.nostr_public_key);
       setRegPrivateKey(loginPrivateKey);
       setLoginToken(data.id);
       setStatus(`Login successful! User ID: ${data.id}`);
+      
+      // After successful login, request a challenge to get an auth token
+      handleGetChallenge();
     } catch (error) {
       setStatus(`Error during login: ${error.message}`);
     }
@@ -182,7 +224,7 @@ function App() {
 
   return (
     <div className="App" style={{ margin: 20 }}>
-      <h2>Ayou Lighting Network Test</h2>
+      <h2>Ayou Lightning Network Test</h2>
       <p style={{ color: 'gray' }}>Status: {status}</p>
       
       {/* Registration Section */}
@@ -227,6 +269,59 @@ function App() {
         <p>User Token (ID from login): {loginToken || 'N/A'}</p>
       </section>
     </div>
+  );
+}
+
+// Dashboard component that will be protected
+function Dashboard() {
+  const { userPublicKey, logout } = useContext(AuthContext);
+  
+  return (
+    <div style={{ margin: 20 }}>
+      <h2>Welcome to Your Dashboard</h2>
+      <p>You are logged in with public key: {userPublicKey}</p>
+      <button onClick={logout}>Logout</button>
+    </div>
+  );
+}
+
+// Home component
+function Home() {
+  const { isLoggedIn } = useContext(AuthContext);
+  
+  return (
+    <div style={{ margin: 20 }}>
+      <h1>Welcome to Ayou Lightning Network</h1>
+      {isLoggedIn ? (
+        <div>
+          <p>You are logged in. Go to your <a href="/dashboard">dashboard</a>.</p>
+        </div>
+      ) : (
+        <div>
+          <p>Please <a href="/auth">log in or register</a> to continue.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <Router>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/auth" element={<NostrAuth />} />
+          <Route 
+            path="/dashboard" 
+            element={
+              <ProtectedRoute element={<Dashboard />} />
+            } 
+          />
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </Router>
+    </AuthProvider>
   );
 }
 

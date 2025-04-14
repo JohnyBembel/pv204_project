@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException, status, Query
+from fastapi import APIRouter, HTTPException, status, Query, Depends
 from nostr_sdk import Keys
 
-from models.user import UserResponse
+from auth.dependencies import get_current_user
+from models.user import UserResponse, UserProfileResponse
 from services.user_service import user_service
 from pydantic import BaseModel
 
@@ -56,3 +57,9 @@ async def login_user(request: LoginRequest):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Login failed: {e}"
         )
+
+@router.get("/profile", response_model=UserProfileResponse)
+async def get_user_profile(user: dict = Depends(get_current_user)):
+    """Returns the profile of the authenticated user"""
+    # user is the MongoDB document from the dependency
+    return user
