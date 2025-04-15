@@ -1,9 +1,8 @@
-from pydantic import BaseModel, Field, validator, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, validator
 from typing import List, Optional
 from datetime import datetime
 from enum import Enum
-from uuid import UUID, uuid4
-
+from uuid import uuid4
 
 class ListingCondition(str, Enum):
     NEW = "new"
@@ -13,17 +12,14 @@ class ListingCondition(str, Enum):
     ACCEPTABLE = "acceptable"
     FOR_PARTS = "for_parts"
 
-
 class ListingStatus(str, Enum):
     ACTIVE = "active"
     ENDED = "ended"
-
 
 class Image(BaseModel):
     url: HttpUrl
     is_primary: bool = False
     description: Optional[str] = None
-
 
 class SellerInfo(BaseModel):
     nostr_public_key: str
@@ -42,9 +38,9 @@ class ListingBase(BaseModel):
     description: str = Field(..., min_length=20, max_length=5000)
     condition: ListingCondition
     category_id: int
-    price: float = Field(gt=0)
+    price: int = Field(gt=0)  # Changed from float to int
     quantity: int = Field(ge=1, default=1)
-    shipping_price: float = Field(ge=0)
+    shipping_price: int = Field(ge=0)  # Changed from float to int
     tags: List[str] = []
 
     @validator('tags')
@@ -53,14 +49,13 @@ class ListingBase(BaseModel):
             raise ValueError('Maximum 20 tags allowed')
         return v
 
-
 class ListingCreate(ListingBase):
     images: List[HttpUrl] = Field(..., min_items=1, max_items=12)
-
+    nonce: Optional[int] = Field(..., description="Proof-of-work nonce")  # PoW nonce required
 
 class ListingInDB(ListingBase):
-    id: UUID
-    seller_id: UUID
+    id: str
+    seller_id: str
     images: List[Image]
     created_at: datetime
     updated_at: datetime
@@ -74,17 +69,15 @@ class ListingInDB(ListingBase):
     class Config:
         orm_mode = True
 
-
 class ListingResponse(ListingInDB):
     pass
-
 
 class ListingUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=3, max_length=80)
     description: Optional[str] = Field(None, min_length=20, max_length=5000)
     condition: Optional[ListingCondition] = None
     category_id: Optional[int] = None
-    price: Optional[float] = Field(None, gt=0)
+    price: Optional[int] = Field(None, gt=0)  # Changed to int
     quantity: Optional[int] = Field(None, ge=1)
     status: Optional[ListingStatus] = None
     tags: Optional[List[str]] = None
