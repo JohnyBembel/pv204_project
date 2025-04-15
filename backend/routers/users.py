@@ -11,9 +11,6 @@ from services.nostr_websocket_finder import websocket_finder
 from pydantic import BaseModel
 
 
-class RegisterRequest(BaseModel):
-    lightning_address: str
-
 
 router = APIRouter(
     prefix="/users",
@@ -58,12 +55,12 @@ class NostrProfileResponse(BaseModel):
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register_user(request: RegisterRequest):
+async def register_user():
     """
     Register a new user and create a Nostr profile
     """
     try:
-        new_user = await user_service.register_user(lightning_address=request.lightning_address)
+        new_user = await user_service.register_user()
         return new_user
     except Exception as e:
         raise HTTPException(
@@ -118,102 +115,20 @@ async def get_user_profile(user: dict = Depends(get_current_user)):
     return user
 
 
-@router.get("/nostr-profile/{public_key}", response_model=NostrProfileResponse)
-async def get_nostr_profile(public_key: str, timeout: int = Query(5, description="Maximum search time in seconds")):
+@router.get("/nostr-profile/{public_key}")
+async def get_nostr_profile(public_key: str):
     """
     Find and retrieve a Nostr profile (kind:0 event) for a given public key
 
     - **public_key**: Nostr public key in npub format
-    - **timeout**: How long to search relays (in seconds)
     """
     try:
-        # First try with WebSocket finder (more reliable)
-        # Use the parameter name 'timeout' as expected by the method
-        profile_data = await websocket_finder.find_profile(public_key, timeout=timeout)
-
-        # If that fails, try with nostr_service as backup
-        if not profile_data:
-            profile_data = await nostr_service.find_profile(public_key, timeout_secs=timeout)
-
-        # If profile is found on the network
-        if profile_data:
-            # Extract fields with proper mapping
-            # Process lightning address fields - prefer lud16 over lightning
-            lightning_value = profile_data.get("lud16") or profile_data.get("lightning")
-
-            # Process fields only if they have valid values
-            if lightning_value and lightning_value.strip() and lightning_value != "string":
-                lud16 = lightning_value
-                lightning = lightning_value
-            else:
-                lud16 = None
-                lightning = None
-
-            response = NostrProfileResponse(
-                pubkey=public_key,
-                event_id=profile_data.get("_event_id"),
-                name=profile_data.get("name"),
-                display_name=profile_data.get("display_name"),
-                about=profile_data.get("about"),
-                picture=profile_data.get("picture"),
-                lightning=lightning,
-                lud16=lud16,
-                created_at=profile_data.get("_created_at"),
-                nip05=profile_data.get("nip05"),
-                found=True,
-                source="network"
-            )
-
-            # Collect other fields that aren't standard
-            standard_fields = {"_event_id", "_pubkey", "_created_at", "_kind", "name", "display_name",
-                               "about", "picture", "lightning", "nip05", "lud16"}
-            other_fields = {k: v for k, v in profile_data.items() if k not in standard_fields}
-
-            if other_fields:
-                response.other_fields = other_fields
-
-            return response
-
-        # Profile not found on network, check database
-        user = await user_service.get_user_by_public_key(public_key)
-        if user:
-            # Process lightning address
-            lightning_address = user.get("lightning_address")
-            if lightning_address and lightning_address.strip() and lightning_address != "string":
-                lud16 = lightning_address
-                lightning = lightning_address
-            else:
-                lud16 = None
-                lightning = None
-
-            # Return data from database
-            return NostrProfileResponse(
-                pubkey=public_key,
-                event_id=user.get("nostr_profile_event_id"),
-                name=user.get("username"),
-                display_name=user.get("display_name"),
-                about=user.get("about"),
-                picture=user.get("picture"),
-                lightning=lightning,
-                lud16=lud16,
-                created_at=user.get("nostr_profile_created_at"),
-                found=True,  # Found in database
-                source="database"
-            )
-
-        # No profile found anywhere
-        return NostrProfileResponse(
-            pubkey=public_key,
-            found=False,
-            source="unknown"
-        )
-
+        return await nostr_service.get_nostr_profile(public_key)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error searching for profile: {str(e)}")
-
+        raise HTTPException(status_code=500, detail=f"Failed to fetch Nostr profile: {str(e)}")
 
 @router.get("/my-nostr-profile", response_model=NostrProfileResponse)
-async def get_my_nostr_profile(user: dict = Depends(get_current_user), timeout: int = Query(5)):
+async def get_my_nostr_profile(user: dict = Depends(get_current_user)):
     """
     Get the authenticated user's Nostr profile
     """
@@ -221,7 +136,7 @@ async def get_my_nostr_profile(user: dict = Depends(get_current_user), timeout: 
         raise HTTPException(status_code=401, detail="Authentication required")
 
     public_key = user["nostr_public_key"]
-    return await get_nostr_profile(public_key, timeout)
+    return await get_nostr_profile(public_key)
 
 
 @router.post("/verify-profile-creation", status_code=status.HTTP_200_OK)

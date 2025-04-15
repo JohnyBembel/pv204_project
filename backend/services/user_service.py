@@ -32,7 +32,7 @@ class UserService:
         raw_seed_bytes = bytes(convertbits(data, 5, 8, False))
         return raw_seed_bytes.hex()
 
-    def generate_mock_profile_data(self, lightning_address: str) -> dict:
+    def generate_mock_profile_data(self) -> dict:
         """Generate mock profile data for testing"""
         # List of adjectives for generating random usernames
         adjectives = ["happy", "sunny", "brave", "clever", "gentle", "mighty", "quiet", "swift"]
@@ -48,10 +48,9 @@ class UserService:
             "display_name": f"{username.replace('_', ' ').title()}",
             "about": f"This is a test profile for {username}. I'm interested in Lightning Network and Nostr.",
             "picture": "https://robohash.org/" + username,  # Random robot avatar
-            "lightning_address": lightning_address
         }
 
-    async def register_user(self, lightning_address: str) -> dict:
+    async def register_user(self) -> dict:
         """
         Register a new user by generating a Nostr key pair using the forced prefix.
         Only the public key is stored in the database.
@@ -68,7 +67,7 @@ class UserService:
         raw_seed = self.derive_raw_seed_from_private_key(private_key_bech32)
 
         # Generate mock profile data
-        profile_data = self.generate_mock_profile_data(lightning_address)
+        profile_data = self.generate_mock_profile_data()
 
         # Create Nostr profile (kind 0)
         try:
@@ -78,7 +77,6 @@ class UserService:
                 display_name=profile_data["display_name"],
                 about=profile_data["about"],
                 picture=profile_data["picture"],
-                lightning_address=lightning_address
             )
 
             # Store the profile event ID and created_at timestamp
@@ -93,7 +91,6 @@ class UserService:
             "id": str(user_id),
             "nostr_public_key": public_key_bech32,
             "created_at": created_at,
-            "lightning_address": lightning_address,
             "raw_seed": raw_seed,
             "username": profile_data["name"],
             "display_name": profile_data["display_name"],
@@ -115,7 +112,6 @@ class UserService:
             "nostr_private_key": private_key_bech32,
             "raw_seed": raw_seed,
             "created_at": created_at,
-            "lightning_address": lightning_address,
             "username": profile_data["name"],
             "display_name": profile_data["display_name"],
             "about": profile_data["about"],
@@ -168,7 +164,6 @@ class UserService:
                     display_name=profile_data["display_name"],
                     about=profile_data["about"],
                     picture=profile_data["picture"],
-                    lightning_address=profile_data["lightning_address"]
                 )
                 nostr_profile_event_id = profile_result.get("event_id")
             except Exception as e:
@@ -181,7 +176,6 @@ class UserService:
                 "id": str(user_id),
                 "nostr_public_key": derived_public_key,
                 "created_at": created_at,
-                "lightning_address": lightning_address,
                 "raw_seed": raw_seed,
                 "username": profile_data["name"],
                 "display_name": profile_data["display_name"],
@@ -197,7 +191,6 @@ class UserService:
         return {
             "id": user["id"],
             "nostr_public_key": user["nostr_public_key"],
-            "lightning_address": user.get("lightning_address", ""),
             "created_at": user["created_at"],
             "username": user.get("username", ""),
             "display_name": user.get("display_name", ""),

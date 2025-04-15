@@ -2,12 +2,26 @@ import hashlib
 import os
 import secrets
 import time
-import json
 from typing import Dict, List, Optional
 from dotenv import load_dotenv
 from nostr_sdk import Keys, Client, EventBuilder, NostrSigner, Tag, Kind, KindStandard
+import json
+import websocket
+import bech32
 
 load_dotenv()
+
+
+async def npub_to_hex(npub):
+    """
+        Convert npub format to hex.
+    """
+    hrp, data = bech32.bech32_decode(npub)
+    if hrp != "npub":
+        raise ValueError("Invalid npub")
+    # Convert 5-bit groups back to 8-bit bytes
+    data_bytes = bech32.convertbits(data, 5, 8, False)
+    return bytes(data_bytes).hex()
 
 
 class NostrService:
@@ -50,21 +64,17 @@ class NostrService:
             return
 
         try:
-            # Parse keys from hex or use custom private key
             if custom_private_key:
                 keys = Keys.parse(custom_private_key)
             else:
                 keys = Keys.parse(self.private_key_hex)
 
-            # Create signer and client
             self.signer = NostrSigner.keys(keys)
             self.client = Client(self.signer)
 
-            # Add relays
             for relay in self.relays:
                 await self.client.add_relay(relay)
 
-            # Connect to relays
             await self.client.connect()
             self.is_connected = True
         except Exception as e:
@@ -105,43 +115,27 @@ class NostrService:
             }
 
         try:
-            # Generate a unique identifier
             unique_id = self._generate_unique_id()
-
-            # Create a list of tags if none provided
             if tags is None:
                 tags = []
 
-            # Always add our identifier tag
             identifier_tag = Tag.identifier(unique_id)
             tags.append(identifier_tag)
 
-            # Create the event builder based on kind
             if kind_value == 0 or kind_value == Kind.from_std(KindStandard.METADATA).as_u16():
-                # For Kind 0 (Metadata)
-                builder = EventBuilder.metadata(content)
+                builder = EventBuilder.metadata(content) # not used in final release
             else:
-                # Default to Kind 1 (Text Note)
                 builder = EventBuilder.text_note(content)
-
-            # Override the kind if needed and not already set
             if kind_value is not None:
                 builder = builder.kind(Kind(kind_value))
-
-            # Add tags
             for tag in tags:
                 builder = builder.tags([tag])
-
-            # Sign and send the event
             event = await builder.sign(self.signer)
             await self.client.send_event(event)
-
-            # Get the event ID
             event_id = event.id().to_hex()
-
             return {
-                "event_id": event_id,
-                "identifier": unique_id
+                "event_id": event_id, #nostr event id
+                "identifier": unique_id #our id
             }
         except Exception as e:
             return {
@@ -149,10 +143,8 @@ class NostrService:
                 "identifier": ""
             }
 
-    async def create_profile(self, private_key, name, display_name=None, about=None, picture=None,
-                             lightning_address=None):
-        # Temporarily connect with user's private key
-        await self.ensure_connected(custom_private_key=private_key)
+    async def create_profile(self, private_key, name):
+        await self.ensure_connected(custom_private_key=private_key)# temporarily connect with user's private key
 
         try:
             # Create profile metadata
@@ -160,42 +152,22 @@ class NostrService:
                 "name": name,
             }
 
-            if display_name:
-                profile["display_name"] = display_name
-
-            if about:
-                profile["about"] = about
-
-            if picture:
-                profile["picture"] = picture
-
-            if lightning_address:
-                profile["lightning"] = lightning_address
-
-            # Convert profile to JSON string
             content = json.dumps(profile)
 
-            # Create a kind 0 event using the proper constructor
-            kind = Kind(0)  # Create Kind 0 (metadata)
-            builder = EventBuilder(kind, content)  # Use the direct constructor with kind and content
-
+            kind = Kind(0)
+            builder = EventBuilder(kind, content)
             print(f"DEBUG: Created EventBuilder with Kind 0")
 
-            # Sign and send the event
             event = await builder.sign(self.signer)
             print(f"DEBUG: Event signed successfully")
 
-            # Verify the kind
             kind_value = event.kind().as_u16()
             print(f"DEBUG: Event kind value: {kind_value}")
 
             await self.client.send_event(event)
             print(f"DEBUG: Event sent to relays")
 
-            # Get the event ID
             event_id = event.id().to_hex()
-
-            # Generate a unique identifier
             unique_id = self._generate_unique_id()
 
             result = {
@@ -209,8 +181,6 @@ class NostrService:
                 "event_id": f"nostr-error-{str(e)}",
                 "identifier": ""
             }
-
-        # Disconnect and reset to default key
         await self.close()
         self.is_connected = False
 
@@ -278,7 +248,30 @@ class NostrService:
             self.is_connected = False
 
 
-# Load env variables
+
+    async def get_nostr_profile(self,pubkey):
+        """
+                Return a nostr profile from the Primal Nostr relay
+        """
+        ws = websocket.create_connection("wss://relay.primal.net/")
+        pubkey_hex = await npub_to_hex(pubkey)
+        req = ["REQ", "find-ln", {"kinds": [0], "authors": [pubkey_hex]}]
+        ws.send(json.dumps(req))
+        print("Request:", req)
+        while True:
+            response = json.loads(ws.recv())
+            print("Response:", response)
+            if response[0] == "EVENT" and response[2]["kind"] == 0:
+                metadata = json.loads(response[2]["content"])
+                ws.close()
+                return metadata
+            if response[0] == "EOSE":
+                break
+        ws.close()
+        return None
+
+
+# load env variables
 private_key_hex = os.getenv("NOSTR_PRIVATE_KEY")
 relays = os.getenv("NOSTR_RELAYS", "ws://localhost:8080").split(",")
 
@@ -287,7 +280,7 @@ if not private_key_hex:
 if not relays:
     raise ValueError("NOSTR_RELAYS environment variable is not set")
 
-# Create a singleton instance
+# create instance
 nostr_service = NostrService(
     private_key_hex=private_key_hex,
     relays=relays,

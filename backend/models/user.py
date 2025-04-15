@@ -4,15 +4,13 @@ from datetime import datetime
 from uuid import UUID
 
 class UserBase(BaseModel):
-    lightning_address: str
-
+    pass
 class UserCreate(UserBase):
     pass
 
 class UserResponse(BaseModel):
     id: str
     nostr_public_key: str
-    lightning_address: str
     created_at: datetime
     nostr_private_key: Optional[str] = None
     raw_seed: Optional[str] = None
