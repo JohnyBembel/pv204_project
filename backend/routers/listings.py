@@ -18,20 +18,18 @@ async def create_listing(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """
-    Create a new listing.
-    This endpoint requires a valid Noise session token (provided in header 'x_noise-token') to prove that the
-    user has been authenticated using their private key.
+    Create a new listing with proof-of-work.
+    Expects a valid session token (provided in the query parameter) and requires a nonce in the JSON body.
     """
-    # Get the seller ID from the authenticated user
     seller_id = UUID(current_user["id"]) if "id" in current_user else uuid4()
-
     try:
         result = await listing_service.create_listing(listing, seller_id)
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating listing: {str(e)}")
+        raise HTTPException(status_code=422, detail=f"Error creating listing: {str(e)}")
 
-@router.get("/all", response_model=List[ListingResponse])
+
+@router.get("/", response_model=List[ListingResponse])
 async def get_all_listings():
     """
     Return all listings from MongoDB.

@@ -1,3 +1,5 @@
+import hashlib
+import json
 from typing import List, Dict, Any, Optional, cast
 from datetime import datetime
 from uuid import UUID, uuid4
@@ -80,17 +82,25 @@ class ListingService:
             listings.append(self._deserialize_listing(listing))
         return listings
 
-
     async def create_listing(self, listing_data: ListingCreate, seller_id: UUID) -> ListingInDB:
         """
-        Create a new listing in MongoDB and publish to Nostr
+        Create a new listing in MongoDB and publish to Nostr.
+        Now also validates the proof-of-work nonce.
         """
         # Convert to dict for easier manipulation
         listing_dict = listing_data.dict()
 
-        # Add database fields
-        listing_dict["id"] = uuid4()
-        listing_dict["seller_id"] = seller_id
+        # Validate Proof-of-Work
+        if "nonce" not in listing_dict:
+            raise Exception("Nonce not provided for proof of work.")
+        nonce = listing_dict["nonce"]
+        is_valid, computed_hash = self.validate_proof_of_work(listing_dict, nonce, difficulty=6)
+        if not is_valid:
+            raise Exception(f"Invalid proof of work. Computed hash: {computed_hash} does not meet difficulty.")
+
+        # Proceed with additional fields
+        listing_dict["id"] = str(uuid4())
+        listing_dict["seller_id"] = str(seller_id)
         listing_dict["created_at"] = datetime.utcnow()
         listing_dict["updated_at"] = datetime.utcnow()
         listing_dict["status"] = "active"
@@ -105,47 +115,32 @@ class ListingService:
 
         # Prepare for MongoDB insertion
         mongo_listing = self._serialize_listing(listing_dict)
-
-        # Store the object ID for the listing (convert UUID to string)
         mongo_listing["_id"] = str(listing_dict["id"])
 
-        # Publish to Nostr
+        # Publish to Nostr (unchanged)
         try:
-            # Create the Nostr content
             title = listing_dict.get("title", "Untitled Listing")
             price = listing_dict.get("price", 0)
             condition = listing_dict.get("condition", "unknown")
-
             content = f"📦 {title}\nPrice: ${price}\nCondition: {condition}\n\n{listing_dict.get('description', '')}"
-
-            # Create tags for the Nostr event
             tags = [
                 Tag.custom(cast(TagKind, TagKind.TITLE()), [title]),
                 Tag.custom(cast(TagKind, TagKind.AMOUNT()), [str(price)]),
                 Tag.custom(cast(TagKind, TagKind.DESCRIPTION()), [condition]),
             ]
-
-            # Publish to Nostr using the generic publish_event method
             nostr_result = await nostr_service.publish_event(content, tags)
-
-            # Store the Nostr data in MongoDB
             mongo_listing["nostr_event_id"] = nostr_result["event_id"]
             mongo_listing["nostr_identifier"] = nostr_result["identifier"]
-            mongo_listing["nostr_event_history"] = []  # Initialize empty history list
-
-            # Add to the return object
+            mongo_listing["nostr_event_history"] = []
             listing_dict["nostr_event_id"] = nostr_result["event_id"]
             listing_dict["nostr_identifier"] = nostr_result["identifier"]
-            listing_dict["nostr_event_history"] = []  # Initialize empty history list
+            listing_dict["nostr_event_history"] = []
         except Exception as e:
             print(f"Error publishing to Nostr: {e}")
-            # Continue anyway, we can sync later
+            # Continue anyway
 
-        # Insert into MongoDB
         collection = mongodb.db[self.collection_name]
         await collection.insert_one(mongo_listing)
-
-        # Return the created listing
         return ListingInDB(**listing_dict)
 
     async def update_listing(self, listing_id: str, listing_update: ListingUpdate) -> Optional[Dict[Any, Any]]:
@@ -226,6 +221,26 @@ class ListingService:
         await collection.replace_one({"_id": listing_id}, mongo_listing)
 
         return existing
+
+    def validate_proof_of_work(self, listing_data: dict, nonce: int, difficulty: int = 7) -> (bool, str):
+        """
+        Validates that the SHA-256 hash of the concatenation of the listing data (as a compact JSON)
+        and nonce starts with a given number of zeros.
+
+        :param listing_data: Dictionary of listing information (exclude nonce)
+        :param nonce: The nonce provided by the frontend
+        :param difficulty: Number of leading zeros required in the hash (default=7)
+        :return: Tuple (is_valid: bool, computed_hash: str)
+        """
+        # Exclude "nonce" if it exists
+        data_to_hash = {k: listing_data[k] for k in listing_data if k != "nonce"}
+        # Use a compact JSON representation with sorted keys.
+        base_str = json.dumps(data_to_hash, sort_keys=True, separators=(",", ":"))
+        combined = base_str + str(nonce)
+        computed_hash = hashlib.sha256(combined.encode("utf-8")).hexdigest()
+        required_prefix = "0" * difficulty
+        return computed_hash.startswith(required_prefix), computed_hash
+
 
 # Create a service instance
 listing_service = ListingService()
