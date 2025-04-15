@@ -147,18 +147,6 @@ const MyListings = () => {
                 <strong>Paid by:</strong> {selectedListing.paid_by}
               </p>
             )}
-            {/* Only show the pay button if the listing status is not ended */}
-            {selectedListing.status !== "ended" && (
-              <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center' }}>
-                <button onClick={() => {
-                  // You could navigate to a payment flow here or open another modal
-                  // For now, we simply alert:
-                  alert(`Payment functionality here for listing: ${selectedListing.title}`);
-                }}>
-                  Pay
-                </button>
-              </div>
-            )}
           </div>
         </div>
       )}
