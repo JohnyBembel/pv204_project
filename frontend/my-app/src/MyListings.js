@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { AuthContext } from './AuthContext';
+import LogoutButton from './LogoutButton';
 
 const MyListings = () => {
   const [listings, setListings] = useState([]);
@@ -48,6 +49,11 @@ const MyListings = () => {
   };
 
   return (
+    <>
+    <header style={{ display: 'flex', justifyContent: 'space-between', padding: '10px', background: '#eee' }}>
+    <h1>Nostr-based marketplace</h1>
+    <LogoutButton />
+  </header>
     <div style={{ padding: '20px' }}>
       <h2>My Listings</h2>
       {loading && <p>Loading your listings...</p>}
@@ -157,6 +163,7 @@ const MyListings = () => {
         </div>
       )}
     </div>
+    </>
   );
 };
 

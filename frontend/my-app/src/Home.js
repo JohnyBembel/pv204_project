@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import LogoutButton from './LogoutButton';
 
 const HomePage = () => {
   const navigate = useNavigate();
@@ -12,6 +13,11 @@ const HomePage = () => {
   const handleAllSellers = () => navigate('/sellers/all');
 
   return (
+    <>
+    <header style={{ display: 'flex', justifyContent: 'space-between', padding: '10px', background: '#eee' }}>
+    <h1>Nostr-based marketplace</h1>
+    <LogoutButton />
+  </header>
     <div style={{ margin: '20px' }}>
       <h2>Welcome Home</h2>
       <p>Choose an action:</p>
@@ -23,6 +29,7 @@ const HomePage = () => {
         <button onClick={handleAllSellers}>All sellers</button>
       </div>
     </div>
+    </>
   );
 };
 

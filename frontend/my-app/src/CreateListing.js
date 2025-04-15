@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import LogoutButton from './LogoutButton';
 
 /**
  * Computes a proof-of-work nonce.
@@ -43,7 +44,7 @@ const CreateListing = () => {
   );
   const [condition, setCondition] = useState('new');
   const [price, setPrice] = useState(10); // Price as integer
-  const [image, setImage] = useState('https://example.com/image1.jpg');
+  const [image, setImage] = useState('https://www.ikea.com/cz/cs/images/products/blahaj-plysova-hracka-zralok__0710175_pe727378_s5.jpg?f=xxxl');
 
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -105,6 +106,11 @@ const CreateListing = () => {
   };
 
   return (
+    <>
+    <header style={{ display: 'flex', justifyContent: 'space-between', padding: '10px', background: '#eee' }}>
+    <h1>Nostr-based marketplace</h1>
+    <LogoutButton />
+  </header>
     <div style={{ margin: '20px' }}>
       <h2>Create a Listing</h2>
       <form onSubmit={handleSubmit}>
@@ -161,7 +167,7 @@ const CreateListing = () => {
         </div>
         <div style={{ marginBottom: '10px' }}>
           <label>
-            Images (comma separated URLs):&nbsp;
+            Image:&nbsp;
             <input
               type="text"
               value={image}
@@ -176,6 +182,7 @@ const CreateListing = () => {
       </form>
       {message && <p>{message}</p>}
     </div>
+    </>
   );
 };
 

@@ -26,7 +26,6 @@ function decodeNsecToRawSeedFallback(nsec) {
 
 const NostrAuth = () => {
   // Registration states
-  const [lightningAddress, setLightningAddress] = useState('');
   const [publicKey, setPublicKey] = useState('');
   const [regPrivateKey, setRegPrivateKey] = useState('');
   const [rawSeed, setRawSeed] = useState('');
@@ -43,21 +42,27 @@ const NostrAuth = () => {
   const [challengeRequested, setChallengeRequested] = useState(false);
   const [challengeVerified, setChallengeVerified] = useState(false);
   
+  // Additional state for registration feedback
+  const [registering, setRegistering] = useState(false);
+  
+  // New state for profile check popup
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  
   // Auth context for global auth state
   const { setIsLoggedIn, setAuthToken, setUserPublicKey } = useContext(AuthContext);
   const navigate = useNavigate();
   
-  // ------------- REGISTRATION ------------- //
+  // Use a default lightning address for registration.
+  const defaultLightningAddress = "user@example.com";
+
+  // ------------- REGISTRATION -------------
   const handleRegister = async () => {
-    if (!lightningAddress) {
-      alert("Please enter a lightning address before registering.");
-      return;
-    }
+    setRegistering(true);
     try {
       const response = await fetch('http://localhost:8000/users/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lightning_address: lightningAddress })
+        body: JSON.stringify({ lightning_address: defaultLightningAddress })
       });
       if (!response.ok) throw new Error(response.statusText);
       const data = await response.json();
@@ -69,10 +74,12 @@ const NostrAuth = () => {
       handleGetChallenge(data.nostr_public_key);
     } catch (error) {
       alert(`Error during registration: ${error.message}`);
+    } finally {
+      setRegistering(false);
     }
   };
 
-  // ------------- LOGIN ------------- //
+  // ------------- LOGIN -------------
   const handleLogin = async (privateKey) => {
     if (!privateKey) {
       alert("Please enter your nsec key to log in.");
@@ -96,7 +103,7 @@ const NostrAuth = () => {
     }
   };
 
-  // ------------- REQUEST CHALLENGE ------------- //
+  // ------------- REQUEST CHALLENGE -------------
   const handleGetChallenge = async (pubKey) => {
     if (!pubKey) {
       alert("Public key is not available.");
@@ -115,11 +122,10 @@ const NostrAuth = () => {
     }
   };
 
-  // ------------- AUTOMATIC CHALLENGE VERIFICATION ------------- //
+  // ------------- AUTOMATIC CHALLENGE VERIFICATION & PROFILE CHECK -------------
   const handleVerifyChallenge = async () => {
     if (!challengeSessionId || !challenge || !regPrivateKey) return;
     try {
-      // Use rawSeed if available; otherwise decode the private key to get the seed
       const rawSeedArray = rawSeed
         ? Buffer.from(rawSeed, 'hex')
         : Buffer.from(decodeNsecToRawSeedFallback(regPrivateKey));
@@ -141,6 +147,21 @@ const NostrAuth = () => {
       const data = await response.json();
       
       if (data.authenticated) {
+        // Before authenticating, check if a profile exists using the public key.
+        const profileUrl = `http://localhost:8000/users/nostr-profile/${encodeURIComponent(publicKey)}`;
+        const profileResp = await fetch(profileUrl);
+        if (!profileResp.ok) {
+          throw new Error("Failed to fetch profile.");
+        }
+        const profileData = await profileResp.json();
+        
+        // If no profile exists, show popup with registration keys.
+        if (!profileData || Object.keys(profileData).length === 0) {
+          setShowProfileModal(true);
+          return; // Stop authentication until a profile is created.
+        }
+        
+        // If profile exists, finish authentication.
         setToken(data.token);
         localStorage.setItem('authToken', data.token);
         localStorage.setItem('userPublicKey', publicKey);
@@ -148,8 +169,6 @@ const NostrAuth = () => {
         setUserPublicKey(publicKey);
         setIsLoggedIn(true);
         setChallengeVerified(true);
-        
-        // Redirect automatically to the home page after successful authentication
         navigate('/home');
       } else {
         alert("Server failed to verify the signature.");
@@ -159,12 +178,10 @@ const NostrAuth = () => {
     }
   };
 
-  // Automatically verify the challenge once it is requested and available
   useEffect(() => {
     if (challengeRequested && challenge && challengeSessionId && !challengeVerified) {
       handleVerifyChallenge();
     }
-    // Note: handleVerifyChallenge is not included in dependencies intentionally to avoid repeated calls.
   }, [challenge, challengeSessionId, challengeRequested, challengeVerified]);
 
   return (
@@ -174,17 +191,12 @@ const NostrAuth = () => {
       {/* Registration Section */}
       <section style={{ marginBottom: '20px' }}>
         <h3>Register</h3>
-        <input
-          type="text"
-          value={lightningAddress}
-          onChange={(e) => setLightningAddress(e.target.value)}
-          placeholder="Lightning address (user@example.com)"
-          style={{ marginRight: '10px' }}
-        />
-        <button onClick={handleRegister}>Register</button>
+        <button onClick={handleRegister} disabled={registering}>
+          {registering ? "Registering... please wait" : "Register"}
+        </button>
       </section>
       
-      {/* Login Section with Text Field */}
+      {/* Login Section */}
       <section style={{ marginBottom: '20px' }}>
         <h3>Login</h3>
         <p>Enter your private key (nsec1):</p>
@@ -204,6 +216,58 @@ const NostrAuth = () => {
         <p>Challenge: {challenge}</p>
         <p>Token: {token}</p>
       </div>
+      
+      {/* Profile creation popup modal */}
+      {showProfileModal && (
+        <div
+          onClick={() => setShowProfileModal(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#fff',
+              padding: '20px',
+              borderRadius: '8px',
+              width: '400px',
+              textAlign: 'center',
+              position: 'relative'
+            }}
+          >
+            <button
+              onClick={() => setShowProfileModal(false)}
+              style={{
+                position: 'absolute',
+                top: '10px',
+                right: '10px',
+                background: 'transparent',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer'
+              }}
+            >
+              &times;
+            </button>
+            <h3>Create Profile Required</h3>
+            <p>You must create a Nostr profile before proceeding.</p>
+            <div style={{ marginTop: '10px', background: '#f0f0f0', padding: '10px', borderRadius: '4px', textAlign: 'left' }}>
+              <p><strong>Your Public Key:</strong> {publicKey}</p>
+              <p><strong>Your Private Key:</strong> {regPrivateKey}</p>
+            </div>
+            <p>Please navigate to the "Create Profile" page to set up your profile.</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
