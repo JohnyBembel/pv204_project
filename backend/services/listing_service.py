@@ -94,6 +94,17 @@ class ListingService:
             listings.append(self._deserialize_listing(listing))
         return listings
 
+    async def get_listings_paid_by(self, pubkey: str) -> List[Dict[Any, Any]]:
+        """
+        Return all listings from MongoDB where 'paid_by' equals the given public key.
+        """
+        collection = mongodb.db[self.collection_name]
+        cursor = collection.find({"paid_by": pubkey})
+        listings = []
+        async for listing in cursor:
+            listings.append(self._deserialize_listing(listing))
+        return listings
+
     async def create_listing(self, listing_data: ListingCreate) -> ListingInDB:
         """
         Create a new listing in MongoDB and publish to Nostr.

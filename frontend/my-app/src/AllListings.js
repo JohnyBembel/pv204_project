@@ -166,7 +166,7 @@ const AllListings = () => {
               />
             )}
             <h3>{listing.title}</h3>
-            <p style={{ fontWeight: 'bold' }}>${listing.price}</p>
+            <p style={{ fontWeight: 'bold' }}>{listing.price} SATs</p>
             <p>{(listing.description || "").substring(0, 100)}...</p>
           </div>
         ))}
@@ -222,7 +222,7 @@ const AllListings = () => {
               />
             )}
             <h2>{selectedListing.title}</h2>
-            <p><strong>Price:</strong> ${selectedListing.price}</p>
+            <p><strong>Price:</strong> {selectedListing.price} SATs</p>
             <p><strong>Description:</strong> {selectedListing.description}</p>
             <p><strong>Condition:</strong> {selectedListing.condition}</p>
             {selectedListing.category_id && (

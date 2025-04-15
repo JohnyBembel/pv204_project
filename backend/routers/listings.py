@@ -49,6 +49,17 @@ async def get_listings_by_pubkey(public_key: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving listings: {str(e)}")
 
+@router.get("/paid_by/{public_key}", response_model=List[ListingResponse])
+async def get_listings_paid_by(public_key: str):
+    """
+    Return all listings that have been paid by the specified public key.
+    """
+    try:
+        results = await listing_service.get_listings_paid_by(public_key)
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving listings: {str(e)}")
+
 
 @router.get("/{listing_id}", response_model=ListingResponse)
 async def get_listing(listing_id: str, background_tasks: BackgroundTasks):

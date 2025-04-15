@@ -5,6 +5,7 @@ const HomePage = () => {
   const navigate = useNavigate();
 
   const handleCreateListing = () => navigate('/listings/create');
+  const handleBoughtListings = () => navigate('/listings/bought');
   const handleMyListings = () => navigate('/listings/mine');
   const handleAllListings = () => navigate('/listings/all');
   const handleInvoices= () => navigate('/invoices');
@@ -16,9 +17,9 @@ const HomePage = () => {
       <p>Choose an action:</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '200px' }}>
         <button onClick={handleCreateListing}>Create a Listing</button>
+        <button onClick={handleBoughtListings}>My bought listings</button>
         <button onClick={handleMyListings}>My Listings</button>
         <button onClick={handleAllListings}>All Listings</button>
-        <button onClick={handleInvoices}>Invoices</button>
         <button onClick={handleAllSellers}>All sellers</button>
       </div>
     </div>
