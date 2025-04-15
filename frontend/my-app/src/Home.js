@@ -8,6 +8,7 @@ const HomePage = () => {
   const handleMyListings = () => navigate('/listings/mine');
   const handleAllListings = () => navigate('/listings/all');
   const handleInvoices= () => navigate('/invoices');
+  const handleAllSellers = () => navigate('/sellers/all');
 
   return (
     <div style={{ margin: '20px' }}>
@@ -18,6 +19,7 @@ const HomePage = () => {
         <button onClick={handleMyListings}>My Listings</button>
         <button onClick={handleAllListings}>All Listings</button>
         <button onClick={handleInvoices}>Invoices</button>
+        <button onClick={handleAllSellers}>All sellers</button>
       </div>
     </div>
   );

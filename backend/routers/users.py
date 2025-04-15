@@ -6,6 +6,7 @@ from models.user import UserResponse, UserProfileResponse
 from services.user_service import user_service
 from services.nostr_service import nostr_service
 from pydantic import BaseModel
+from typing import List
 
 
 
@@ -14,6 +15,17 @@ router = APIRouter(
     tags=["users"],
 )
 
+
+@router.get("/", response_model=List)
+async def get_users():
+    try:
+        users = await user_service.get_all_users()
+        return users
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting users: {e}"
+        )
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_user():
