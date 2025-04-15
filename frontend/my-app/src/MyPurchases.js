@@ -7,6 +7,8 @@ const MyPurchases = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedListing, setSelectedListing] = useState(null);
+  const [reviewModal, setReviewModal] = useState({ open: false, listing: null });
+  const [reviewData, setReviewData] = useState({ rating: 1, comment: '' });
 
   const { userPublicKey } = useContext(AuthContext);
 
@@ -43,6 +45,52 @@ const MyPurchases = () => {
     setSelectedListing(null);
   };
 
+  const openReviewModal = (listing) => {
+    setReviewModal({ open: true, listing });
+  };
+
+  const closeReviewModal = () => {
+    setReviewModal({ open: false, listing: null });
+    setReviewData({ rating: 1, comment: '' });
+  };
+
+  const submitReview = async () => {
+    if (!reviewData.comment.trim()) {
+      alert('Please provide a comment.');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('authToken'); // Retrieve the token from local storage or another source
+      if (!token) {
+        alert('Session token is missing. Please log in again.');
+        return;
+      }
+
+      const url = `http://localhost:8000/reviews?session-token=${encodeURIComponent(token)}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          transaction_id: reviewModal.listing.id,
+          rating: reviewData.rating,
+          comment: reviewData.comment,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to submit review');
+      }
+
+      alert('Review submitted successfully!');
+      closeReviewModal();
+    } catch (err) {
+      alert(`Error: ${err.message}`);
+    }
+  };
+
   return (
     <>
     <header style={{ display: 'flex', justifyContent: 'space-between', padding: '10px', background: '#eee' }}>
@@ -59,13 +107,11 @@ const MyPurchases = () => {
         {listings.map((listing) => (
           <div
             key={listing.id}
-            onClick={() => openModal(listing)}
             style={{
               border: '1px solid #ccc',
               borderRadius: '8px',
               padding: '16px',
               width: '300px',
-              cursor: 'pointer',
               boxShadow: '2px 2px 5px rgba(0,0,0,0.1)',
               backgroundColor: listing.status === "ended" ? "#ffd6d6" : "#fff"
             }}
@@ -80,6 +126,10 @@ const MyPurchases = () => {
             <h3>{listing.title}</h3>
             <p style={{ fontWeight: 'bold' }}>{listing.price} SATs</p>
             <p>{(listing.description || "").substring(0, 100)}...</p>
+            <button onClick={() => openModal(listing)}>View Details</button>
+            <button onClick={() => openReviewModal(listing)} style={{ marginTop: '10px' }}>
+              Leave Review
+            </button>
           </div>
         ))}
       </div>
@@ -137,11 +187,72 @@ const MyPurchases = () => {
             <p><strong>Description:</strong> {selectedListing.description}</p>
             <p><strong>Condition:</strong> {selectedListing.condition}</p>
             <p><strong>Status:</strong> {selectedListing.status}</p>
-            {selectedListing.paid_by && (
-              <p style={{ color: "green" }}>
-                <strong>Paid by:</strong> {selectedListing.paid_by}
-              </p>
-            )}
+          </div>
+        </div>
+      )}
+
+      {reviewModal.open && (
+        <div
+          onClick={closeReviewModal}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#fff',
+              padding: '20px',
+              borderRadius: '8px',
+              width: '400px',
+              position: 'relative'
+            }}
+          >
+            <button
+              onClick={closeReviewModal}
+              style={{
+                position: 'absolute',
+                top: '10px',
+                right: '10px',
+                background: 'transparent',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer'
+              }}
+            >
+              &times;
+            </button>
+            <h3>Leave a Review for {reviewModal.listing.title}</h3>
+            <label>
+              Rating:
+              <select
+                value={reviewData.rating}
+                onChange={(e) => setReviewData({ ...reviewData, rating: parseInt(e.target.value) })}
+              >
+                {[1, 2, 3, 4, 5].map((rating) => (
+                  <option key={rating} value={rating}>{rating}</option>
+                ))}
+              </select>
+            </label>
+            <br />
+            <label>
+              Comment:
+              <textarea
+                value={reviewData.comment}
+                onChange={(e) => setReviewData({ ...reviewData, comment: e.target.value })}
+                style={{ width: '100%', height: '100px', marginTop: '10px' }}
+              />
+            </label>
+            <br />
+            <button onClick={submitReview} style={{ marginTop: '10px' }}>Submit Review</button>
           </div>
         </div>
       )}

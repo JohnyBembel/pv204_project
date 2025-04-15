@@ -12,7 +12,7 @@ router = APIRouter(
 @router.post("/", response_model=ReviewResponse)
 async def create_review(review: ReviewCreate, current_user: Dict[str, Any] = Depends(get_current_user)):
     try:
-        buyer_pubkey = current_user["pubkey"]
+        buyer_pubkey = current_user["nostr_public_key"]
         result = await review_service.create_review(review, buyer_pubkey)
 
         return result

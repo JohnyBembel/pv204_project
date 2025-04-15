@@ -44,7 +44,7 @@ class PoPService:
         }
         message_str = json.dumps(message, sort_keys=True)
         
-        # sign the transaction with seller's priv. key
+        # todo: damn it wtf
         seller_signature = create_signature(seller_private_key, message_str)
         
         pop = ProofOfPurchase(
@@ -63,7 +63,14 @@ class PoPService:
         return pop
     
     async def get_proof_of_purchase(self, transaction_id: str) -> Optional[ProofOfPurchase]:
-        pop_data = await mongodb.proofs_of_purchase.find_one({"transaction_id": transaction_id})
+        return ProofOfPurchase(
+            listing_id="b028dc76-0517-44f7-ac90-979e3d4bdfa4",
+            transaction_id="transaction_id",
+            buyer_pubkey="example_buyer_pubkey",
+            seller_pubkey="example_seller_pubkey",
+            seller_signature="example_signature",
+        )
+        pop_data = await mongodb.pops.find_one({"listing_id": transaction_id})
         
         if not pop_data:
             return None
