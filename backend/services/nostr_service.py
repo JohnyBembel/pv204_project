@@ -2,16 +2,31 @@ import hashlib
 import os
 import secrets
 import time
-from typing import Dict, List
+from typing import Dict, List, Optional
 from dotenv import load_dotenv
-from nostr_sdk import Keys, Client, EventBuilder, NostrSigner, Tag
+from nostr_sdk import Keys, Client, EventBuilder, NostrSigner, Tag, Kind, KindStandard
+import json
+import websocket
+import bech32
 
 load_dotenv()
 
 
+async def npub_to_hex(npub):
+    """
+        Convert npub format to hex.
+    """
+    hrp, data = bech32.bech32_decode(npub)
+    if hrp != "npub":
+        raise ValueError("Invalid npub")
+    # Convert 5-bit groups back to 8-bit bytes
+    data_bytes = bech32.convertbits(data, 5, 8, False)
+    return bytes(data_bytes).hex()
+
+
 class NostrService:
     """
-    A generic Nostr service for publishing various types of events
+    A Nostr service for publishing various types of events
     to the Nostr network using the nostr-sdk library
     """
 
@@ -38,47 +53,55 @@ class NostrService:
 
         return unique_id
 
-    async def connect(self):
-        """Connect to Nostr relays"""
+    async def connect(self, custom_private_key: str = None):
+        """
+        Connect to Nostr relays
+
+        Args:
+            custom_private_key: Optional private key to use instead of the default
+        """
         if self.is_connected:
             return
 
         try:
-            # Parse keys from hex
-            keys = Keys.parse(self.private_key_hex)
-            print(f'Using Nostr key: {keys.public_key().to_bech32()}')
+            if custom_private_key:
+                keys = Keys.parse(custom_private_key)
+            else:
+                keys = Keys.parse(self.private_key_hex)
 
-            # Create signer and client
             self.signer = NostrSigner.keys(keys)
             self.client = Client(self.signer)
 
-            # Add relays
             for relay in self.relays:
                 await self.client.add_relay(relay)
 
-            # Connect to relays
             await self.client.connect()
             self.is_connected = True
-            print(f"Connected to {len(self.relays)} Nostr relay(s)")
         except Exception as e:
-            print(f"Error connecting to Nostr relays: {e}")
             self.is_connected = False
+            raise e
 
-    async def ensure_connected(self):
-        """Ensure we're connected to relays before operations"""
-        if not self.is_connected:
-            await self.connect()
+    async def ensure_connected(self, custom_private_key: str = None):
+        """
+        Ensure we're connected to relays before operations
+
+        Args:
+            custom_private_key: Optional private key to use for this connection
+        """
+        if not self.is_connected or custom_private_key:
+            await self.connect(custom_private_key)
 
     async def publish_event(self,
                             content: str,
-                            tags: List[Tag] = None) -> Dict[str, str]:
+                            tags: List[Tag] = None,
+                            kind_value: int = None) -> Dict[str, str]:
         """
         Publish a generic event to Nostr relays with an automatically generated unique identifier.
 
         Args:
             content: Content of the event
             tags: List of Tag objects to include (optional)
-            kind: Kind of the event (default: 1 for text_note)
+            kind_value: Integer value of the Kind (optional)
 
         Returns:
             Dictionary with event_id and identifier
@@ -86,52 +109,84 @@ class NostrService:
         await self.ensure_connected()
 
         if not self.client or not self.signer:
-            print("Nostr client not initialized properly")
             return {
                 "event_id": "nostr-error-not-initialized",
                 "identifier": ""
             }
 
         try:
-            # Generate a unique identifier
             unique_id = self._generate_unique_id()
-
-            # Create a list of tags if none provided
             if tags is None:
                 tags = []
 
-            # Always add our identifier tag
             identifier_tag = Tag.identifier(unique_id)
             tags.append(identifier_tag)
 
-            # Create the event builder
-            builder = EventBuilder.text_note(content)
-
-            # Add tags
+            if kind_value == 0 or kind_value == Kind.from_std(KindStandard.METADATA).as_u16():
+                builder = EventBuilder.metadata(content) # not used in final release
+            else:
+                builder = EventBuilder.text_note(content)
+            if kind_value is not None:
+                builder = builder.kind(Kind(kind_value))
             for tag in tags:
                 builder = builder.tags([tag])
-
-            # Sign and send the event
             event = await builder.sign(self.signer)
-            result = await self.client.send_event(event)
-
-            # Get the event ID - store only the hex format
+            await self.client.send_event(event)
             event_id = event.id().to_hex()
-            event_id_bech32 = event.id().to_bech32()
-
-            print(f"Published event to Nostr: {event_id_bech32} with identifier: {unique_id}")
-
             return {
-                "event_id": event_id,
-                "identifier": unique_id
+                "event_id": event_id, #nostr event id
+                "identifier": unique_id #our id
             }
         except Exception as e:
-            print(f"Error publishing to Nostr: {e}")
             return {
                 "event_id": f"nostr-error-{str(e)}",
                 "identifier": ""
             }
 
+    async def create_profile(self, private_key, name):
+        await self.ensure_connected(custom_private_key=private_key)# temporarily connect with user's private key
+
+        try:
+            # Create profile metadata
+            profile = {
+                "name": name,
+            }
+
+            content = json.dumps(profile)
+
+            kind = Kind(0)
+            builder = EventBuilder(kind, content)
+            print(f"DEBUG: Created EventBuilder with Kind 0")
+
+            event = await builder.sign(self.signer)
+            print(f"DEBUG: Event signed successfully")
+
+            kind_value = event.kind().as_u16()
+            print(f"DEBUG: Event kind value: {kind_value}")
+
+            await self.client.send_event(event)
+            print(f"DEBUG: Event sent to relays")
+
+            event_id = event.id().to_hex()
+            unique_id = self._generate_unique_id()
+
+            result = {
+                "event_id": event_id,
+                "identifier": unique_id
+            }
+            print(f"DEBUG: Profile creation successful with event ID: {event_id}")
+        except Exception as e:
+            print(f"ERROR creating profile: {str(e)}")
+            result = {
+                "event_id": f"nostr-error-{str(e)}",
+                "identifier": ""
+            }
+        await self.close()
+        self.is_connected = False
+
+        return result
+
+    
     async def publish_update(self,
                              content: str,
                              previous_event_id: str,
@@ -142,7 +197,6 @@ class NostrService:
         await self.ensure_connected()
 
         if not self.client or not self.signer:
-            print("Nostr client not initialized properly")
             return {
                 "event_id": "nostr-error-not-initialized",
                 "identifier": ""
@@ -160,6 +214,7 @@ class NostrService:
             identifier_tag = Tag.identifier(unique_id)
             tags.append(identifier_tag)
 
+            # Add reference to previous event
             tags.append(Tag.parse(["e", previous_event_id]))
 
             # Create the event builder
@@ -171,20 +226,16 @@ class NostrService:
 
             # Sign and send the event
             event = await builder.sign(self.signer)
-            result = await self.client.send_event(event)
+            await self.client.send_event(event)
 
             # Get the event ID in hex format
             event_id = event.id().to_hex()
-            event_id_bech32 = event.id().to_bech32()
-
-            print(f"Published update to Nostr: {event_id_bech32} with identifier: {unique_id}")
 
             return {
                 "event_id": event_id,
                 "identifier": unique_id
             }
         except Exception as e:
-            print(f"Error publishing update to Nostr: {e}")
             return {
                 "event_id": f"nostr-error-{str(e)}",
                 "identifier": ""
@@ -195,7 +246,30 @@ class NostrService:
         if self.client and self.is_connected:
             await self.client.disconnect()
             self.is_connected = False
-            print("Disconnected from Nostr relays")
+
+
+
+    async def get_nostr_profile(self,pubkey):
+        """
+                Return a nostr profile from the Primal Nostr relay
+        """
+        ws = websocket.create_connection("wss://relay.primal.net/")
+        pubkey_hex = await npub_to_hex(pubkey)
+        req = ["REQ", "find-ln", {"kinds": [0], "authors": [pubkey_hex]}]
+        ws.send(json.dumps(req))
+        print("Request:", req)
+        while True:
+            response = json.loads(ws.recv())
+            print("Response:", response)
+            if response[0] == "EVENT" and response[2]["kind"] == 0:
+                metadata = json.loads(response[2]["content"])
+                ws.close()
+                return metadata
+            if response[0] == "EOSE":
+                break
+        ws.close()
+        return None
+
 
 # load env variables
 private_key_hex = os.getenv("NOSTR_PRIVATE_KEY")
@@ -206,7 +280,7 @@ if not private_key_hex:
 if not relays:
     raise ValueError("NOSTR_RELAYS environment variable is not set")
 
-# Create a singleton instance
+# create instance
 nostr_service = NostrService(
     private_key_hex=private_key_hex,
     relays=relays,

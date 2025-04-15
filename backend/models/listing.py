@@ -67,7 +67,7 @@ class ListingInDB(ListingBase):
     status: ListingStatus = ListingStatus.ACTIVE
     views_count: int = 0
     favorite_count: int = 0
-    category: str
+    category: Optional[str] = None
     seller: Optional[SellerInfo] = None
     nostr_event_id: Optional[str] = None
 

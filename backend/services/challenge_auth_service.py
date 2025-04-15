@@ -5,10 +5,10 @@ from bech32 import bech32_decode, convertbits
 import nacl.signing
 import nacl.exceptions
 import binascii
+from database import mongodb
 
-# In-memory session store (for simplicity)
-SESSIONS = {}
-SESSION_LIFETIME_SECONDS = 300  # 5 minutes
+# Session lifetime in seconds (1 hour = 3600 seconds)
+SESSION_LIFETIME_SECONDS = 3600  # 1 hour
 
 
 def parse_public_key(npub: str) -> bytes:
@@ -56,28 +56,43 @@ def get_public_key_from_seed(raw_seed_hex: str) -> bytes:
 
 
 class ChallengeAuthService:
-    def get_challenge(self, public_key: str) -> (str, str):
+    async def get_challenge(self, public_key: str) -> (str, str):
         session_id = str(uuid.uuid4())
         challenge = f"auth-challenge:{session_id}"
         expires_at = datetime.utcnow() + timedelta(seconds=SESSION_LIFETIME_SECONDS)
-        SESSIONS[session_id] = {
+
+        # Store session in MongoDB
+        session_data = {
+            "session_id": session_id,
             "public_key": public_key,  # stored in bech32 format, e.g., "npub1..."
             "challenge": challenge,
             "expires_at": expires_at,
-            "verified": False
+            "verified": False,
+            "created_at": datetime.utcnow()
         }
+
+        # Insert into sessions collection
+        await mongodb.db.sessions.insert_one(session_data)
+
+        # Create TTL index if it doesn't exist (only needs to be done once)
+        # This will automatically delete expired sessions
+        await mongodb.db.sessions.create_index("expires_at", expireAfterSeconds=0)
+
         print(
             f"DEBUG: Created challenge for public key {public_key} -> session_id: {session_id}, challenge: {challenge}")
         return session_id, challenge
 
     async def verify_challenge_signature(self, session_id: str, signature: bytes) -> bool:
-        session_data = SESSIONS.get(session_id)
+        # Get session from MongoDB
+        session_data = await mongodb.db.sessions.find_one({"session_id": session_id})
+
         if not session_data:
             print(f"DEBUG: Session {session_id} not found.")
             return False
+
         if datetime.utcnow() > session_data["expires_at"]:
             print(f"DEBUG: Session {session_id} expired.")
-            del SESSIONS[session_id]
+            await mongodb.db.sessions.delete_one({"session_id": session_id})
             return False
 
         stored_pubkey_bech32 = session_data["public_key"]
@@ -96,19 +111,17 @@ class ChallengeAuthService:
             # Attempt to verify the signature
             try:
                 verify_key.verify(challenge_bytes, signature)
-                session_data["verified"] = True
+                # Update verification status in MongoDB
+                await mongodb.db.sessions.update_one(
+                    {"session_id": session_id},
+                    {"$set": {"verified": True}}
+                )
                 print(f"DEBUG: Signature verification successful for session {session_id}")
                 return True
             except nacl.exceptions.BadSignatureError:
                 # If verification fails with the bech32-derived key, try using the user's raw seed
                 # This is a fallback to handle TweetNaCl's key derivation on the frontend
-                from database import mongodb
-                user = None
-                try:
-                    # Use await here since find_one is an async operation
-                    user = await mongodb.db.users.find_one({"nostr_public_key": stored_pubkey_bech32})
-                except Exception as e:
-                    print(f"DEBUG: Error finding user: {e}")
+                user = await mongodb.db.users.find_one({"nostr_public_key": stored_pubkey_bech32})
 
                 if user and "raw_seed" in user:
                     try:
@@ -120,7 +133,11 @@ class ChallengeAuthService:
                         tweetnacl_verify_key = nacl.signing.VerifyKey(tweetnacl_pubkey)
                         tweetnacl_verify_key.verify(challenge_bytes, signature)
 
-                        session_data["verified"] = True
+                        # Update verification status in MongoDB
+                        await mongodb.db.sessions.update_one(
+                            {"session_id": session_id},
+                            {"$set": {"verified": True}}
+                        )
                         print(f"DEBUG: Signature verification successful with TweetNaCl key for session {session_id}")
                         return True
                     except nacl.exceptions.BadSignatureError as bse:
@@ -139,24 +156,31 @@ class ChallengeAuthService:
             print(f"DEBUG: Exception during verification for session {session_id}: {e}")
             return False
 
-    def is_session_valid(self, session_id: str) -> bool:
-        session_data = SESSIONS.get(session_id)
+    async def is_session_valid(self, session_id: str) -> bool:
+        session_data = await mongodb.db.sessions.find_one({"session_id": session_id})
+
         if not session_data:
             return False
+
         if datetime.utcnow() > session_data["expires_at"]:
-            del SESSIONS[session_id]
+            await mongodb.db.sessions.delete_one({"session_id": session_id})
             return False
+
         return session_data["verified"]
 
-    def get_public_key_for_session(self, session_id: str) -> str:
-        session_data = SESSIONS.get(session_id)
+    async def get_public_key_for_session(self, session_id: str) -> str:
+        session_data = await mongodb.db.sessions.find_one({"session_id": session_id})
+
         if not session_data:
             return None
+
         if datetime.utcnow() > session_data["expires_at"]:
-            del SESSIONS[session_id]
+            await mongodb.db.sessions.delete_one({"session_id": session_id})
             return None
+
         if not session_data["verified"]:
             return None
+
         return session_data["public_key"]
 
 
