@@ -134,4 +134,30 @@ class UserService:
             "picture": user.get("picture", "")
         }
 
+    async def get_user_by_public_key(self, public_key: str) -> dict:
+        """Get user by their public key"""
+        collection = mongodb.db[self.collection_name]
+        user = await collection.find_one({"nostr_public_key": public_key})
+        if not user:
+            return None
+        return user
+    
+    async def get_all_users(self) -> list:
+        """Returns all users but only their pubkeys and ids"""
+        collection = mongodb.db[self.collection_name]
+        cursor = collection.find({})
+        users = []
+        async for user in cursor:
+            user_data = {
+                "id": str(user["_id"]),
+                "nostr_public_key": user.get("nostr_public_key"),
+                "created_at": user.get("created_at"),
+                "username": user.get("username", ""),
+                "display_name": user.get("display_name", ""),
+                "about": user.get("about", "")
+            }
+
+            users.append(user_data)
+        return users
+
 user_service = UserService()
