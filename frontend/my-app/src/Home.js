@@ -9,8 +9,6 @@ const HomePage = () => {
   const handleAllListings = () => navigate('/listings/all');
   const handleInvoices= () => navigate('/invoices');
   const handleAllSellers = () => navigate('/sellers/all');
-  const handleInvoices= () => navigate('/invoices');
-  const handleAllSellers = () => navigate('/sellers/all');
 
   return (
     <div style={{ margin: '20px' }}>
