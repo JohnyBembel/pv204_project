@@ -4,12 +4,12 @@ import LogoutButton from './LogoutButton';
 
 const AllListings = () => {
   const [listings, setListings] = useState([]);
-  const [sellerProfiles, setSellerProfiles] = useState({}); // Maps pubkey => profile object
+  const [sellerProfiles, setSellerProfiles] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedListing, setSelectedListing] = useState(null);
   
-  // Payment-related states (UNCHANGED)
+  // Payment-related states 
   const [showPayModal, setShowPayModal] = useState(false);
   const [invoiceStr, setInvoiceStr] = useState("");
   const [buyerNwc, setBuyerNwc] = useState("");
@@ -83,7 +83,7 @@ const AllListings = () => {
     setShowPayModal(false);
   };
 
-  // 5) Payment-related logic (UNCHANGED)
+  // 5) Payment-related logic
   const handlePay = async (listing) => {
     try {
       if (!listing.pubkey) {

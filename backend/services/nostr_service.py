@@ -214,10 +214,8 @@ class NostrService:
         pubkey_hex = await npub_to_hex(pubkey)
         req = ["REQ", "find-ln", {"kinds": [0], "authors": [pubkey_hex]}]
         ws.send(json.dumps(req))
-        print("Request:", req)
         while True:
             response = json.loads(ws.recv())
-            print("Response:", response)
             if response[0] == "EVENT" and response[2]["kind"] == 0:
                 metadata = json.loads(response[2]["content"])
                 ws.close()

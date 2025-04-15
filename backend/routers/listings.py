@@ -18,7 +18,6 @@ async def create_listing(
 ):
     """
     Create a new listing with proof-of-work.
-    Expects a valid session token (provided in the query parameter) and requires a nonce in the JSON body.
     """
     try:
         result = await listing_service.create_listing(listing)

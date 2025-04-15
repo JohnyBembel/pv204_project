@@ -52,17 +52,6 @@ async def check_invoice_status(nwc_string:str,invoicestr: str):
     result = await invoice_service.check_invoice_status(nwc_string,invoicestr)
     return result
 
-#@router.post("/try_to_pay_invoice/")
-#async def try_to_pay_invoice(nwc_buyer_string:str,invoicestr: str):
-#    """Try to pay an LN invoice. - DEBUG ONLY NOW"""
-#    result = await invoice_service.try_to_pay_invoice(nwc_buyer_string,invoicestr)
-#    return result
-#
-#@router.get("/check_payment/")
-#async def check_payment(nwc_buyer_string:str,invoicestr: str):
-#    """Verify LN payment status. - DEBUGGING ONLY NOW"""
-#    result = await invoice_service.check_payment(nwc_buyer_string,invoicestr)
-#    return result
 @router.get("/pay_invoice/")
 async def pay_invoice(nwc_buyer_string:str,invoicestr:str):
     await invoice_service.try_to_pay_invoice(nwc_buyer_string, invoicestr)

@@ -61,7 +61,7 @@ const MyPurchases = () => {
     }
 
     try {
-      const token = localStorage.getItem('authToken'); // Retrieve the token from local storage or another source
+      const token = localStorage.getItem('authToken');
       if (!token) {
         alert('Session token is missing. Please log in again.');
         return;

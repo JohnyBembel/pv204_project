@@ -31,7 +31,6 @@ async def get_challenge(public_key: str = Query(...)):
 @router.post("/verify", response_model=VerifyResponse)
 async def verify_signature(req: VerifyRequest):
     try:
-        print(f"DEBUG: Incoming request body: {req.dict()}")
         signature_bytes = base64.b64decode(req.signature_b64)
 
         # Verify the signature with the challenge
@@ -41,7 +40,6 @@ async def verify_signature(req: VerifyRequest):
             return {"authenticated": False, "token": None}
         return {"authenticated": True, "token": req.session_id}
     except Exception as e:
-        print(f"DEBUG: Exception in verify_signature endpoint: {e}")
         return {"authenticated": False, "token": None}
 
 
@@ -52,8 +50,6 @@ async def validate_token(
         authorization: str = Header(None)
 ):
     """Validates if a token is still valid"""
-    print("DEBUG: /validate endpoint called")
-
     # Try to get the token from various sources
     actual_token = token or token_header or None
 
@@ -62,17 +58,10 @@ async def validate_token(
         if authorization.startswith("Bearer "):
             actual_token = authorization.replace("Bearer ", "")
 
-    print(f"DEBUG: Token from query: {token}")
-    print(f"DEBUG: Token from header: {token_header}")
-    print(f"DEBUG: Token from auth header: {authorization}")
-    print(f"DEBUG: Actual token being used: {actual_token}")
-
     if not actual_token:
-        print("DEBUG: No token found in request")
         raise HTTPException(status_code=422, detail="Token is required")
 
     is_valid = await challenge_auth_service.is_session_valid(actual_token)
-    print(f"DEBUG: Token validation result: {is_valid}")
 
     if not is_valid:
         raise HTTPException(status_code=401, detail="Invalid or expired token")

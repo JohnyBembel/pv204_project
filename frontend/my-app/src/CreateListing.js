@@ -10,7 +10,7 @@ import LogoutButton from './LogoutButton';
  * @param {number} difficulty - Number of leading zeros required (default 4)
  * @returns {Promise<{ nonce: number, hash: string }>}
  */
-async function computeProofOfWork(data, difficulty = 7) {
+async function computeProofOfWork(data, difficulty = 6) {
     let nonce = 0;
     const encoder = new TextEncoder();
     const requiredPrefix = "0".repeat(difficulty);
@@ -21,7 +21,7 @@ async function computeProofOfWork(data, difficulty = 7) {
     
     // Sort keys to enforce ordering
     const sortedKeys = Object.keys(dataToHash).sort();
-    // Serialize the data using sorted keys (JSON.stringify produces a compact string)
+    // Serialize the data using sorted keys
     const baseStr = JSON.stringify(dataToHash, sortedKeys);
     
     while (true) {
@@ -43,13 +43,13 @@ const CreateListing = () => {
     'This is an example description that meets the minimum requirement. Feel free to change it as needed.'
   );
   const [condition, setCondition] = useState('new');
-  const [price, setPrice] = useState(10); // Price as integer
+  const [price, setPrice] = useState(10);
   const [image, setImage] = useState('https://www.ikea.com/cz/cs/images/products/blahaj-plysova-hracka-zralok__0710175_pe727378_s5.jpg?f=xxxl');
 
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Retrieve the user’s token from localStorage (or your AuthContext)
+  // Retrieve the user’s token from localStorage
   const token = localStorage.getItem('authToken') || '';
   const pubkey = localStorage.getItem('userPublicKey');
 
@@ -70,7 +70,7 @@ const CreateListing = () => {
 
     try {
       // Compute a valid nonce that makes the hash start with "0000"
-      const { nonce, hash } = await computeProofOfWork(basePayload, 4);
+      const { nonce, hash } = await computeProofOfWork(basePayload, 5);
       setMessage(`Proof-of-work successful! Nonce: ${nonce} - Hash: ${hash}`);
       
       // Append the nonce to the payload
@@ -96,8 +96,6 @@ const CreateListing = () => {
 
       const responseData = await response.json();
       setMessage('Listing created successfully!');
-      console.log('Server response:', responseData);
-      // Optionally, reset form fields here.
     } catch (error) {
       setMessage(`Error: ${error.message}`);
     } finally {

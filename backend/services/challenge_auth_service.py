@@ -22,10 +22,8 @@ def parse_public_key(npub: str) -> bytes:
         raw_pubkey = bytes(convertbits(data, 5, 8, False))
         if len(raw_pubkey) != 32:
             raise ValueError(f"Invalid public key length: {len(raw_pubkey)} (expected 32 bytes)")
-        print(f"DEBUG: Parsed public key {npub} to raw hex: {raw_pubkey.hex()}")
         return raw_pubkey
     except Exception as e:
-        print(f"DEBUG: Error in parse_public_key for {npub}: {e}")
         raise e
 
 
@@ -47,11 +45,8 @@ def get_public_key_from_seed(raw_seed_hex: str) -> bytes:
 
         # Get the raw bytes of the public key
         raw_pubkey = verify_key.encode()
-
-        print(f"DEBUG: Generated public key from seed {raw_seed_hex[:8]}...: {raw_pubkey.hex()}")
         return raw_pubkey
     except Exception as e:
-        print(f"DEBUG: Error generating public key from seed: {e}")
         raise e
 
 
@@ -78,8 +73,6 @@ class ChallengeAuthService:
         # This will automatically delete expired sessions
         await mongodb.db.sessions.create_index("expires_at", expireAfterSeconds=0)
 
-        print(
-            f"DEBUG: Created challenge for public key {public_key} -> session_id: {session_id}, challenge: {challenge}")
         return session_id, challenge
 
     async def verify_challenge_signature(self, session_id: str, signature: bytes) -> bool:
@@ -87,11 +80,9 @@ class ChallengeAuthService:
         session_data = await mongodb.db.sessions.find_one({"session_id": session_id})
 
         if not session_data:
-            print(f"DEBUG: Session {session_id} not found.")
             return False
 
         if datetime.utcnow() > session_data["expires_at"]:
-            print(f"DEBUG: Session {session_id} expired.")
             await mongodb.db.sessions.delete_one({"session_id": session_id})
             return False
 
@@ -101,11 +92,9 @@ class ChallengeAuthService:
         try:
             # Decode the stored public key using our helper
             raw_pubkey = parse_public_key(stored_pubkey_bech32)
-            print(f"DEBUG: Using raw public key (hex): {raw_pubkey.hex()} for session {session_id}")
 
             # Encode the challenge
             challenge_bytes = challenge_str.encode()
-            print(f"DEBUG: Challenge bytes: {challenge_bytes}")
 
             verify_key = nacl.signing.VerifyKey(raw_pubkey)
             # Attempt to verify the signature
@@ -116,7 +105,6 @@ class ChallengeAuthService:
                     {"session_id": session_id},
                     {"$set": {"verified": True}}
                 )
-                print(f"DEBUG: Signature verification successful for session {session_id}")
                 return True
             except nacl.exceptions.BadSignatureError:
                 # If verification fails with the bech32-derived key, try using the user's raw seed
@@ -127,7 +115,6 @@ class ChallengeAuthService:
                     try:
                         # Generate the public key using TweetNaCl's method
                         tweetnacl_pubkey = get_public_key_from_seed(user["raw_seed"])
-                        print(f"DEBUG: TweetNaCl-derived public key: {tweetnacl_pubkey.hex()}")
 
                         # Verify with the TweetNaCl-derived public key
                         tweetnacl_verify_key = nacl.signing.VerifyKey(tweetnacl_pubkey)
@@ -138,22 +125,16 @@ class ChallengeAuthService:
                             {"session_id": session_id},
                             {"$set": {"verified": True}}
                         )
-                        print(f"DEBUG: Signature verification successful with TweetNaCl key for session {session_id}")
                         return True
                     except nacl.exceptions.BadSignatureError as bse:
-                        print(f"DEBUG: TweetNaCl fallback verification also failed for session {session_id}: {bse}")
                         return False
                     except Exception as e:
-                        print(f"DEBUG: Error in TweetNaCl fallback: {e}")
                         return False
                 else:
-                    print(f"DEBUG: No raw seed found for user with public key {stored_pubkey_bech32}")
                     return False
         except nacl.exceptions.BadSignatureError as bse:
-            print(f"DEBUG: BadSignatureError for session {session_id}: {bse}")
             return False
         except Exception as e:
-            print(f"DEBUG: Exception during verification for session {session_id}: {e}")
             return False
 
     async def is_session_valid(self, session_id: str) -> bool:

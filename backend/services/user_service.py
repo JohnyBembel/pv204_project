@@ -12,7 +12,6 @@ class UserService:
         """
         Generate a Nostr key pair repeatedly until the public key starts with the given prefix.
         Returns a tuple: (private_key, public_key).
-        Both keys are nostr_sdk.Key objects; you can call .to_bech32() on them.
         """
         while True:
             keys = Keys.generate()

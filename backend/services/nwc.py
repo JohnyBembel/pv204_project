@@ -358,11 +358,3 @@ def getBalance( nwc_obj ):
     drsp = decrypt( nwc_obj[ "app_privkey" ], nwc_obj[ "wallet_pubkey" ], ersp )
     dobj = json.loads( drsp )
     return dobj
-
-
-# print( makeInvoice( processNWCstring( nwc_string ), 100, "test" ) )
-# print( checkInvoice( processNWCstring( nwc_string ), invoice="lnbc1u1png6lw0pp5h4l73ajf4u548ktalztfwt7k9wtp9xhgqs6t0my0mw450nfkmnrsdq8w3jhxaqcqzzsxqyz5vqsp5asqxxjr2uhsfxyjwt2gxrq38dejkr76rmzl0zstjqlx8rrlcqpns9qxpqysgq22dwgadd7xnsnn8jzwkfxwy7nwclzt4d8wa3adrml83a0nvgy2hzm565k4qn0rcrzx7n2j8dszq9yqvhdx2z0xes77j5e480clx6d7cq2vvqj5" ) )
-# print( didPaymentSucceed( processNWCstring( nwc_string ), "lnbc700n1pngmqvkpp57yg7u02n2pxack552mwdl5k8derwsyrgh2uft0lptqvcw8qv9l0qdpuge6kuerfdenjqsrnw4cx2un5v4ehgmn9wssx7m3qwd6xzcmtv4ezumn9waescqzzsxqrrsssp5uy70kfvlwfw4xhlu0k7hr7luq0qwgl5sdc9lyk4aqxvqzqqesjes9qyyssq9w7dyt6e64dyhws70qkvnauq59vmkh9lt4j5t598x3f7xzzv5edyg2g0rtdphtqmkqq3xja27kz4gvdgdy7qeymtms32d82gpmtekvspeyp4rq" ) )
-# print( tryToPayInvoice( processNWCstring( nwc_string ), "lnbc700n1pngmqvkpp57yg7u02n2pxack552mwdl5k8derwsyrgh2uft0lptqvcw8qv9l0qdpuge6kuerfdenjqsrnw4cx2un5v4ehgmn9wssx7m3qwd6xzcmtv4ezumn9waescqzzsxqrrsssp5uy70kfvlwfw4xhlu0k7hr7luq0qwgl5sdc9lyk4aqxvqzqqesjes9qyyssq9w7dyt6e64dyhws70qkvnauq59vmkh9lt4j5t598x3f7xzzv5edyg2g0rtdphtqmkqq3xja27kz4gvdgdy7qeymtms32d82gpmtekvspeyp4rq" ) )
-# print( listTx( processNWCstring( nwc_string, { "type": "outgoing"} ) ) )
-# print( getBalance( processNWCstring( nwc_string ) ) )

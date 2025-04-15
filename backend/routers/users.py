@@ -30,7 +30,7 @@ async def get_users():
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_user():
     """
-    Register a new user and create a Nostr profile
+    Register a new user
     """
     try:
         new_user = await user_service.register_user()

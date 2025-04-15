@@ -264,7 +264,8 @@ const NostrAuth = () => {
               <p><strong>Your Public Key:</strong> {publicKey}</p>
               <p><strong>Your Private Key:</strong> {regPrivateKey}</p>
             </div>
-            <p>Please navigate to the "Create Profile" page to set up your profile.</p>
+            <p>Please navigate to the <url>www.primal.net</url></p>
+            <p>Log in there with above generated private key and set up your profile.</p>
           </div>
         </div>
       )}

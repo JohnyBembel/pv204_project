@@ -86,7 +86,6 @@ class ListingService:
         """
         Return all listings that were created by the specified public key.
         """
-        print(pubkey)
         collection = mongodb.db[self.collection_name]
         cursor = collection.find({"pubkey": pubkey})
         listings = []
@@ -111,13 +110,12 @@ class ListingService:
         Validates the proof-of-work nonce.
         """
         listing_dict = listing_data.dict()
-        print(listing_dict)
 
         # Validate Proof-of-Work
         if "nonce" not in listing_dict:
             raise Exception("Nonce not provided for proof of work.")
         nonce = listing_dict["nonce"]
-        is_valid, computed_hash = self.validate_proof_of_work(listing_dict, nonce, difficulty=4)
+        is_valid, computed_hash = self.validate_proof_of_work(listing_dict, nonce, difficulty=5)
         if not is_valid:
             raise Exception(f"Invalid proof of work. Computed hash: {computed_hash} does not meet difficulty.")
 
@@ -178,13 +176,10 @@ class ListingService:
         # Initialize event history if it doesn't exist
         if "nostr_event_history" not in mongo_listing:
             mongo_listing["nostr_event_history"] = []
-            print(f"Initializing nostr_event_history for listing {listing_id}")
 
         # Update in Nostr if we have a previous event ID
         if "nostr_event_id" in existing:
             try:
-                print(f"Updating Nostr event, current history length: {len(mongo_listing['nostr_event_history'])}")
-
                 # Save current event to history before updating
                 previous_event = {
                     "event_id": existing.get("nostr_event_id", ""),
@@ -193,7 +188,6 @@ class ListingService:
                 }
                 # Add to history
                 mongo_listing["nostr_event_history"].append(previous_event)
-                print(f"Added previous event to history, new length: {len(mongo_listing['nostr_event_history'])}")
 
                 # Format content for Nostr
                 title = existing.get("title", "Untitled Listing")
@@ -223,8 +217,6 @@ class ListingService:
                 existing["nostr_event_id"] = mongo_listing["nostr_event_id"]
                 existing["nostr_identifier"] = mongo_listing["nostr_identifier"]
                 existing["nostr_event_history"] = mongo_listing["nostr_event_history"]
-
-                print(f"Updated Nostr event, history now has {len(mongo_listing['nostr_event_history'])} entries")
             except Exception as e:
                 print(f"Error updating in Nostr: {e}")
 

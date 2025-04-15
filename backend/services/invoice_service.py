@@ -89,7 +89,6 @@ class InvoiceService:
     async def check_payment(self, nwc_buyer_string, invoicestr) -> bool:
         try:
             result = await self.check_invoice_status(nwc_buyer_string, invoicestr)
-            print(result)
             return (
                     result and
                     "result" in result and
