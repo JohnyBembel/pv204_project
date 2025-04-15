@@ -8,7 +8,7 @@ from starlette.types import Message
 
 from routers import invoices
 from database import mongodb
-from routers import listings, users, auth
+from routers import listings, users, auth, reviews
 from services.nostr_service import nostr_service
 from services.user_service import user_service
 
@@ -83,6 +83,7 @@ app.add_middleware(
 app.include_router(listings.router)
 app.include_router(users.router)
 app.include_router(auth.router)
+app.include_router(reviews.router)
 
 app.include_router(invoices.router)
 

@@ -1,9 +1,13 @@
 from pydantic import BaseModel
 
-class ProofOfPurchase(BaseModel):
+class ReviewCreate(BaseModel):
     transaction_id: str
-    listing_id: str
-    buyer_pubkey: str
+    rating: int
+    comment: str
+
+class ReviewResponse(BaseModel):
+    transaction_id: str
     seller_pubkey: str
-    seller_signature: str  # signature from the seller
-    
+    rating: int
+    comment: str
+    verified: bool

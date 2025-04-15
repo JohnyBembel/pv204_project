@@ -46,17 +46,13 @@ class PoPService:
         try:
             await mongodb.proofs_of_purchase.insert_one(pop.dict())
         except Exception as e:
-            print(f"DEBUG: error inserting PoP but continuing: {e}")
+            raise ValueError(f"error storing PoP: {e}")
 
         return pop
     
     async def get_proof_of_purchase(self, transaction_id: str) -> Optional[ProofOfPurchase]:
-        try:
-            pop_data = await mongodb.proofs_of_purchase.find_one({"transaction_id": transaction_id})
-        except Exception as e:
-            print("DEBUG: error finding the pop: {e}")
-            return None
-
+        pop_data = await mongodb.proofs_of_purchase.find_one({"transaction_id": transaction_id})
+        
         if not pop_data:
             return None
 
