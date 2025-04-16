@@ -59,7 +59,7 @@ The frontend will be available at `http://localhost:3000`
 
 ## Individual contributions
 
-**Jakub Smorada**
+**Jakub Smorada** (also under username Ahearys)
 
 1. MongoDB deployment
 2. Authentication of user's private key
