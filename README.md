@@ -74,4 +74,5 @@ The frontend will be available at `http://localhost:3000`
 
 **Andrej Smatana**
 
-1. Reviews
+1. Reviews API and their frontend
+2. Proof of Purchase (not working)
